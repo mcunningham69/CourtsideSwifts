@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23788.4" systemVersion="24F74" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="Item" representedClassName="Item" syncable="YES" codeGenerationType="class">
+        <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <entity name="PlayerStatus" representedClassName="PlayerStatus" syncable="YES" codeGenerationType="class">
+        <attribute name="attendingSession" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="courtNo" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="email" optional="YES" attributeType="String"/>
+        <attribute name="finishedAt" optional="YES" attributeType="String"/>
+        <attribute name="firstName" optional="YES" attributeType="String"/>
+        <attribute name="firstVisit" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="gameID" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="gamesCount" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="grade" optional="YES" attributeType="String"/>
+        <attribute name="isAdmin" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="isChoosing" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="isChosen" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="isFacilitator" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="isPlaying" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="isSelectable" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="isTimeOut" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="isWaiting" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="lastVisit" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="orderOfPlay" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="playerID" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="playerName" optional="YES" attributeType="String"/>
+        <attribute name="squareID" optional="YES" attributeType="String"/>
+        <attribute name="startedAt" optional="YES" attributeType="String"/>
+        <attribute name="surname" optional="YES" attributeType="String"/>
+        <attribute name="visits" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="warmingUp" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+    </entity>
+</model>
