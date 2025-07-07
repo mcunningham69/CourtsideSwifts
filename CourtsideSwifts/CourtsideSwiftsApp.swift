@@ -10,11 +10,13 @@ import SwiftUI
 @main
 struct CourtsideSwiftsApp: App {
     let persistenceController = PersistenceController.shared
+    @StateObject private var networkMonitor = NetworkMonitor.shared
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
+            SplashView()
+                .environmentObject(networkMonitor)
+
         }
     }
 }
