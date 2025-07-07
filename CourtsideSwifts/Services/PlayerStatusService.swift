@@ -7,7 +7,6 @@
 
 import Foundation
 
-import Foundation
 
 class PlayerStatusService {
     private let baseURL = URL(string: "https://swiftsplayerapi2025.azurewebsites.net/api/playerstatus")!

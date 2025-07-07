@@ -8,13 +8,14 @@
 import Foundation
 
 extension PlayerStatus {
-    var categoryEnum: PlayerCategory {
+    var categoryEnum: PlayerCategory? {
         get {
-            PlayerCategory(rawValue: Int(self.playerCategories)) ?? .none
+            PlayerCategory(rawValue: Int(self.playerCategories))
         }
         set {
-            self.playerCategories = Int32(newValue.rawValue)
+            if let value = newValue {
+                self.playerCategories = Int32(value.rawValue)
+            }
         }
     }
 }
-
