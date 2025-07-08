@@ -147,8 +147,62 @@ class PlayerListViewModel: ObservableObject {
         players.append(newDTO)
         newPlayerName = "" // Clear the input field
     }
-    
     func checkInSelected() {
+        for i in players.indices {
+            if selectedPlayers.contains(players[i]) {
+                players[i].attendingSession = true
+                players[i].isChosen = false
+                players[i].warmingUp = true
+                players[i].lastVisit = Date()
+                players[i].playerCategories = 0
+                players[i].needsSync = true
+                
+                updateCoreData(for: players[i] )
+            }
+        }
+        applySearchFilter()
+        
+        Task {
+            await PlayerApiService.shared.syncPendingPlayersToAzure()
+        }
+
+    }
+
+    func checkOutSelected() {
+        for i in players.indices {
+            if selectedPlayers.contains(players[i]) {
+                players[i].attendingSession = false
+                players[i].isChosen = false
+                players[i].warmingUp = false
+                players[i].isTimeOut = false
+                players[i].playerCategories = 0
+                players[i].needsSync = true
+                
+                updateCoreData(for: players[i] )
+            }
+        }
+        applySearchFilter()
+        Task {
+            await PlayerApiService.shared.syncPendingPlayersToAzure()
+        }
+
+    }
+
+    private func updateCoreData(for dto: PlayerStatusDTO) {
+        let entity = PlayerStatus.createOrUpdate(from: dto, in: context)
+       // let entity = dto.toEntity(context: context)
+        entity.needsSync = true
+        entity.attendingSession = dto.attendingSession
+
+        do {
+            try context.save()
+        } catch {
+            print("❌ Failed to save player: \(error.localizedDescription)")
+        }
+    }
+
+    
+ /*  func checkInSelected() {
         for player in selectedPlayers {
             // Update player fields
             if let index = players.firstIndex(where: { $0.id == player.id }) {
@@ -180,7 +234,7 @@ class PlayerListViewModel: ObservableObject {
         }
 
         selectedPlayers.removeAll()
-    }
+    }*/
     
     private func saveContext() {
         do{

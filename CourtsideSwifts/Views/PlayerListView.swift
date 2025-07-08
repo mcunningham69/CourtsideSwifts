@@ -49,6 +49,7 @@ struct PlayerListView: View {
                             Text(player.playerName ?? "Unnamed Player")
                                 .font(.headline)
                                 .foregroundColor((player.attendingSession) ? .orange : .primary)
+                                .animation(.easeIn, value: player.attendingSession)
                             
                             if player.isTopRank {
                                 Image(systemName: "star.fill")

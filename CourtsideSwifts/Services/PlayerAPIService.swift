@@ -100,7 +100,7 @@ class PlayerApiService: ObservableObject {
     }
 
     private func uploadToAzure(_ dto: PlayerStatusDTO) async throws -> Bool {
-        guard let url = URL(string: "https://yourapi.azurewebsites.net/api/playerstatus") else { return false }
+        guard let url = URL(string: "https://swiftsplayerapi2025.azurewebsites.net/api/playerstatus") else { return false }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
