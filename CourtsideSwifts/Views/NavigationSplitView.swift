@@ -9,6 +9,8 @@ import SwiftUI
 struct MainSessionSplitView: View {
     @StateObject private var listVM: PlayerListViewModel
     @StateObject private var sessionVM: PlayingSessionViewModel
+    
+    
 
     init() {
         // Temporary instance to create the ViewModel with a publisher

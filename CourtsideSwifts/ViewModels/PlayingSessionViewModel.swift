@@ -5,6 +5,8 @@ import CoreData
 @MainActor
 class PlayingSessionViewModel: ObservableObject {
     @Published var groupedParticipants: [PlayersByCategory] = []
+    @Published var playerToTimeout: PlayerStatusDTO? = nil
+
 
     private let context = PersistenceController.shared.container.viewContext
     private var cancellables = Set<AnyCancellable> ()
@@ -87,10 +89,21 @@ class PlayingSessionViewModel: ObservableObject {
         }
     }
     
-
-    
-    
     func toggleSelection(for player: PlayerStatusDTO) {
+        let isEligible = isSelectableForChooser(player)
+        print("🎯 Toggling \(player.playerName ?? "Unknown"), eligible: \(isEligible)")
+
+        guard isEligible else { return }
+
+        if selectedWaitingPlayers.contains(player.id) {
+            selectedWaitingPlayers.remove(player.id)
+        } else {
+            selectedWaitingPlayers.insert(player.id)
+        }
+    }
+
+
+ /*   func toggleSelection(for player: PlayerStatusDTO) {
         guard player.categoryEnum == .waiting else { return }
 
         if selectedWaitingPlayers.contains(player.id) {
@@ -98,7 +111,61 @@ class PlayingSessionViewModel: ObservableObject {
         } else if selectedWaitingPlayers.count < 3 {
             selectedWaitingPlayers.insert(player.id)
         }
+    }*/
+
+    func isSelectableForChooser(_ target: PlayerStatusDTO) -> Bool {
+        guard let chooser = groupedParticipants
+            .flatMap({ $0.players })
+            .first(where: { $0.isChoosing }) else {
+            return false
+        }
+
+        let gradeOrder: [String] = ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2"]
+
+        let chooserGrade = chooser.grade?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+        let targetGrade = target.grade?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+
+        guard let chooserIndex = gradeOrder.firstIndex(of: chooserGrade),
+              let targetIndex = gradeOrder.firstIndex(of: targetGrade) else {
+            print("⚠️ Invalid grade(s): chooser=\(chooser.grade ?? "nil"), target=\(target.grade ?? "nil")")
+            return false
+        }
+
+        // ✅ A1, A2, B1 can choose anyone
+        if chooserIndex <= 2 { return true }
+        
+        // ✅ Check how many eligible players (by grade rule) are available
+        let eligiblePlayers = groupedParticipants
+            .first(where: { $0.category == "Waiting" })?
+            .players
+            .filter { waitingPlayer in
+                guard let waitingGradeIndex = gradeOrder.firstIndex(of: waitingPlayer.grade ?? "") else { return false }
+                return waitingGradeIndex >= chooserIndex - 2 && waitingGradeIndex <= chooserIndex
+            } ?? []
+
+        let eligibleCount = eligiblePlayers.count
+
+        // ✅ Relax rule if fewer than 4 eligible players to select from
+        if eligibleCount < 4 {
+            print("⚠️ Relaxing grade rule: only \(eligibleCount) eligible players for chooser \(chooser.playerName ?? "")")
+            return true
+        }
+        
+
+        if chooserIndex >= 3 {
+            // B2 or lower — restrict to at most 2 levels above
+            return targetIndex >= chooserIndex - 2 && targetIndex <= chooserIndex
+        } else {
+            // B1 or higher can pick anyone
+            return true
+        }
+
+
     }
+
+
+
+
 
     
     func confirmChooserSelection() {
@@ -106,6 +173,20 @@ class PlayingSessionViewModel: ObservableObject {
 
         let allPlayers = groupedParticipants.flatMap { $0.players }
         guard let chooser = allPlayers.first(where: { $0.isChoosing }) else { return }
+        
+        let selectedPlayers = allPlayers.filter { selectedWaitingPlayers.contains($0.id) }
+
+        let group = [chooser] + selectedPlayers
+
+        let isValid = selectedPlayers.allSatisfy { target in
+            canChoose(chooser: chooser, target: target, groupSoFar: group)
+        }
+
+        guard isValid else {
+            print("❌ Invalid selection: one or more players exceed allowed grade difference")
+            return
+        }
+
 
         let context = PersistenceController.shared.container.viewContext
         
@@ -214,6 +295,26 @@ class PlayingSessionViewModel: ObservableObject {
         }
     }
 
+    func canChoose(chooser: PlayerStatusDTO, target: PlayerStatusDTO, groupSoFar: [PlayerStatusDTO]) -> Bool {
+        
+        let gradeOrder: [String] = ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2"]
+
+        guard let chooserIndex = gradeOrder.firstIndex(of: chooser.grade ?? ""),
+              let targetIndex = gradeOrder.firstIndex(of: target.grade ?? "") else {
+            return false // Unknown grades
+        }
+
+        // ✅ Exception: If A1 is already in group
+        if groupSoFar.contains(where: { $0.grade == "A1" || chooser.grade == "A1" || target.grade == "A1" }) {
+            return true
+        }
+
+        // ✅ A1, A2, B1 can choose anyone
+        if chooserIndex <= 2 { return true }
+
+        // ✅ Others can pick up to 2 grades higher
+        return targetIndex <= chooserIndex + 2
+    }
 
 
 

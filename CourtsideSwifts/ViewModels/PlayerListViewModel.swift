@@ -208,9 +208,6 @@ class PlayerListViewModel: ObservableObject {
             await PlayerApiService.shared.syncPendingPlayersToAzure()
         }
         
-
-
-
     }
 
     func checkOutSelected() {

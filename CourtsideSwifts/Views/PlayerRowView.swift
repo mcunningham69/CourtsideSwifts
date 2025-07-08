@@ -39,10 +39,10 @@ struct PlayerRowView: View {
                 } else if player.isWaiting {
                     Text("🕓 Waiting")
                         .foregroundColor(.orange)
-                } else if player.isChosen {
+                } /*else if player.isChosen {
                     Text("✅ Chosen")
                         .foregroundColor(.blue)
-                }
+                }*/
             }
 
             // 👇 Add grade below name

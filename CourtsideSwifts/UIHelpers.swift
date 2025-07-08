@@ -7,3 +7,11 @@ extension View {
     }
 }
 #endif
+
+var isRunningOnMac: Bool {
+    #if targetEnvironment(macCatalyst)
+    return true
+    #else
+    return false
+    #endif
+}

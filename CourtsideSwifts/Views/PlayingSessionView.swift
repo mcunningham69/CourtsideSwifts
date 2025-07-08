@@ -8,6 +8,8 @@ import SwiftUI
 
 struct PlayingSessionView: View {
     @ObservedObject var viewModel: PlayingSessionViewModel
+    @State private var showTimeoutConfirmation = false
+
     
     var body: some View {
         ZStack(alignment: .top){
@@ -17,7 +19,6 @@ struct PlayingSessionView: View {
                     if let waitingGroup = viewModel.groupedParticipants.first(where: { $0.category == "Waiting" }),
                        !waitingGroup.players.isEmpty,
                        let chooser = waitingGroup.players.first(where: { $0.isChoosing }) {
-
                         
                         HStack {
                             Label(
@@ -26,7 +27,7 @@ struct PlayingSessionView: View {
                                         Text(chooser.playerName ?? "Unknown")
                                             .font(.headline)
                                             .bold()
-
+                                        
                                     }
                                 },
                                 icon: {
@@ -62,56 +63,88 @@ struct PlayingSessionView: View {
                                 Section(header: Text(group.category).font(.headline)) {
                                     
                                     ForEach(group.players) { player in
-                                        let showSwipe = ["Waiting", "Playing", "Chosen"].contains(group.category)
-
-                                        let row = Group {
+                                        let showTimeout = ["Waiting", "Playing", "Chosen"].contains(group.category)
+                                        
+                                        // Base row
+                                        let baseRow: some View = Group {
                                             if group.category == "Waiting" && !player.isChoosing {
                                                 PlayerRowView(player: player)
                                                     .contentShape(Rectangle())
                                                     .onTapGesture {
-                                                        viewModel.toggleSelection(for: player)
+                                                        let isEligible = viewModel.isSelectableForChooser(player)
+                                                        print("👆 Tap on \(player.playerName ?? "Unnamed") — Eligible: \(isEligible)")
+                                                        if isEligible {
+                                                            viewModel.toggleSelection(for: player)
+                                                        }
                                                     }
+
                                                     .background(
                                                         viewModel.selectedWaitingPlayers.contains(player.id)
                                                         ? Color.blue.opacity(0.2)
                                                         : Color.clear
                                                     )
-                                            } else {
+                                                    .opacity(viewModel.isSelectableForChooser(player) ? 1.0 : 0.3)
+                                                    .help(
+                                                        viewModel.isSelectableForChooser(player)
+                                                        ? ""
+                                                        : "Not eligible for selection"
+                                                    )
+                                            }
+
+
+                                            else {
                                                 PlayerRowView(player: player)
                                             }
                                         }
-
-                                        if showSwipe {
-                                            row
-                                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                                    Button(role: .destructive) {
-                                                        viewModel.timeoutPlayer(player)
+                                        
+                                        if showTimeout {
+                                            if isRunningOnMac {
+                                                HStack {
+                                                    baseRow
+                                                    Spacer(minLength: 8)
+                                                    Button {
+                                                        viewModel.playerToTimeout = player
+                                                        showTimeoutConfirmation = true
                                                     } label: {
-                                                        Label("Time Out", systemImage: "clock.fill")
+                                                        Image(systemName: "clock.fill")
+                                                            .foregroundColor(.red)
                                                     }
+                                                    .buttonStyle(.plain)
+                                                    .padding(.trailing, 8)
                                                 }
+                                            } else {
+                                                baseRow
+                                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                                        Button(role: .destructive) {
+                                                            viewModel.playerToTimeout = player
+                                                            showTimeoutConfirmation = true
+                                                        } label: {
+                                                            Label("Time Out", systemImage: "clock.fill")
+                                                        }
+                                                    }
+                                            }
                                         } else {
-                                            row
+                                            baseRow
                                         }
                                     }
-
                                     
-                                   /* ForEach(group.players) { player in
-                                        if group.category == "Waiting" && !player.isChoosing {
-                                            PlayerRowView(player: player)
-                                                .contentShape(Rectangle())
-                                                .onTapGesture {
-                                                    viewModel.toggleSelection(for: player)
-                                                }
-                                                .background(
-                                                    viewModel.selectedWaitingPlayers.contains(player.id)
-                                                    ? Color.blue.opacity(0.2)
-                                                    : Color.clear
-                                                )
-                                        } else {
-                                            PlayerRowView(player: player)
-                                        }
-                                    }*/
+                                    
+                                    /* ForEach(group.players) { player in
+                                     if group.category == "Waiting" && !player.isChoosing {
+                                     PlayerRowView(player: player)
+                                     .contentShape(Rectangle())
+                                     .onTapGesture {
+                                     viewModel.toggleSelection(for: player)
+                                     }
+                                     .background(
+                                     viewModel.selectedWaitingPlayers.contains(player.id)
+                                     ? Color.blue.opacity(0.2)
+                                     : Color.clear
+                                     )
+                                     } else {
+                                     PlayerRowView(player: player)
+                                     }
+                                     }*/
                                     
                                     
                                 }
@@ -136,8 +169,8 @@ struct PlayingSessionView: View {
                             }
                         }
                     }
-
-
+                    
+                    
                     
                     if viewModel.selectedWaitingPlayers.count == 3 {
                         Button("Confirm Selection") {
