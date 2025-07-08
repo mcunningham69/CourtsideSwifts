@@ -77,7 +77,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         case gameID = "gameid"
         case playerCategories = "playercategories"
         case needsSync = "needsSync"
-        case durationInSeconds = "duartioninseconds"
+        case durationInSeconds = "durationInSeconds"
     }
     
     init(from decoder: Decoder) throws {
