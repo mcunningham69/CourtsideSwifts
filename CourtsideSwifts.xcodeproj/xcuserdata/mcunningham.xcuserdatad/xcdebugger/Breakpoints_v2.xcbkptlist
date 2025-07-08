@@ -55,17 +55,17 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "7974D0A5-B4F5-492F-9C8F-D37F21D0365D"
+            uuid = "45204A8D-DBB2-4A98-9B3E-B707A2BF7BE2"
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "CourtsideSwifts/Views/PlayerListView.swift"
+            filePath = "CourtsideSwifts/ViewModels/PlayerListViewModel.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "107"
-            endingLineNumber = "107"
-            landmarkName = "body"
-            landmarkType = "24">
+            startingLineNumber = "164"
+            endingLineNumber = "164"
+            landmarkName = "checkInSelected()"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

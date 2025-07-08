@@ -12,3 +12,15 @@ enum PlayerCategory: Int, Codable {
     case playing = 3
     
 }
+
+extension PlayerCategory: CaseIterable {
+    var displayName: String {
+        switch self {
+        case .pending: return "Pending"
+        case .waiting: return "Waiting"
+        case .chosen:  return "Chosen"
+        case .playing: return "Playing"
+        }
+    }
+}
+

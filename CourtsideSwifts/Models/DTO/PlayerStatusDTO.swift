@@ -8,6 +8,7 @@
 import Foundation
 import CoreData
 import SwiftUICore
+import SwiftUI
 
 
 struct PlayerStatusDTO: Codable, Identifiable, Hashable {
@@ -206,7 +207,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         entity.isChosen = self.isChosen
         entity.isAdmin = self.isAdmin
         entity.courtNo = Int32(self.courtNo)
-        entity.attendingSession = self.attendingSession ?? false
+        entity.attendingSession = self.attendingSession
         entity.firstVisit = self.firstVisit
         entity.lastVisit = self.lastVisit
         entity.startedAt = self.startedAt
@@ -308,10 +309,32 @@ extension PlayerStatusDTO {
         default:   return .gray
         }
     }
-
+    
     var isTopRank: Bool {
         guard let g = grade?.uppercased() else { return false }
         return g == "A1" || g == "A2"
     }
 }
+
+extension PlayerStatusDTO {
+    static func createOrUpdate(from dto: PlayerStatusDTO, in context: NSManagedObjectContext) -> PlayerStatus {
+        let request: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+        request.predicate = NSPredicate(format: "playerID == %d", dto.playerID)
+
+        if let existing = try? context.fetch(request).first {
+            return existing
+        } else {
+            return dto.toEntity(context: context)
+        }
+    }
+}
+
+extension PlayerStatusDTO {
+    var gameColor: Color {
+        let colors: [Color] = [.blue, .green, .purple, .orange, .pink, .teal, .indigo, .mint, .cyan]
+        let index = abs(Int(gameID)) % colors.count
+        return colors[index]
+    }
+}
+
 
