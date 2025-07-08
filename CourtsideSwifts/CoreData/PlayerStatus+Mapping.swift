@@ -41,6 +41,7 @@ extension PlayerStatus {
         player.squareID = dto.squareID
         player.gameID = Int32(dto.gameID)
         player.playerCategories = Int32(dto.playerCategories)
+        player.durationInSeconds = Int32(dto.durationInSeconds)
 
         return player
     }

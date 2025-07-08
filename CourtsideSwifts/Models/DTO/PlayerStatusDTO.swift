@@ -30,7 +30,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
     var isChosen: Bool
     var isAdmin: Bool
     var courtNo: Int32
-    var attendingSession: Bool?
+    var attendingSession: Bool
     var firstVisit: Date?
     var lastVisit: Date?
     var startedAt: String?
@@ -101,20 +101,21 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         surname = try container.decodeIfPresent(String.self, forKey: .surname)
         email = try container.decodeIfPresent(String.self, forKey: .email)
         visits = try container.decode(Int32.self, forKey: .visits)
-        isPlaying = try decodeBool(forKey: .isPlaying)
-        isWaiting = try decodeBool(forKey: .isWaiting)
-        isSelectable = try decodeBool(forKey: .isSelectable)
-        isFacilitator = try decodeBool(forKey: .isFacilitator)
-        isChoosing = try decodeBool(forKey: .isChoosing)
-        isTimeOut = try decodeBool(forKey: .isTimeOut)
-        warmingUp = try decodeBool(forKey: .warmingUp)
+        isPlaying = try container.decode(Bool.self, forKey: .isPlaying)
+        isWaiting = try container.decode(Bool.self, forKey: .isWaiting)
+        isSelectable = try container.decode(Bool.self, forKey: .isSelectable)
+        isFacilitator = try container.decode(Bool.self, forKey: .isFacilitator)
+        isChoosing = try container.decode(Bool.self, forKey: .isChoosing)
+        isTimeOut = try container.decode(Bool.self, forKey: .isTimeOut)
+        warmingUp = try container.decode(Bool.self, forKey: .warmingUp)
         grade = try container.decodeIfPresent(String.self, forKey: .grade)
         gamesCount = try container.decode(Int32.self, forKey: .gamesCount)
-        isChosen = try decodeBool(forKey: .isChosen)
-        isAdmin = try decodeBool(forKey: .isAdmin)
+        isChosen = try container.decode(Bool.self, forKey: .isChosen)
+        isAdmin = try container.decode(Bool.self, forKey: .isAdmin)
         courtNo = try container.decode(Int32.self, forKey: .courtNo)
-        attendingSession = try container.decodeIfPresent(Bool.self,forKey: .attendingSession)
-        needsSync = try container.decodeIfPresent(Bool.self, forKey: .needsSync)
+        attendingSession = try container.decode(Bool.self,forKey: .attendingSession)
+        needsSync = try container.decode(Bool.self, forKey: .needsSync)
+        durationInSeconds = try container.decode(Int32.self, forKey: .durationInSeconds)
 
 
         // ✅ Manually decode and format date strings
@@ -247,7 +248,8 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         squareID: String? = nil,
         gameID: Int32 = 0,
         playerCategories: Int = 0,
-        needsSync: Bool = false
+        needsSync: Bool = false,
+        durationInSeconds: Int32 = 0
     ) {
         self.playerID = playerID
         self.playerName = playerName
@@ -277,6 +279,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         self.gameID = gameID
         self.playerCategories = playerCategories
         self.needsSync = needsSync
+        self.durationInSeconds = durationInSeconds
     }
 
     

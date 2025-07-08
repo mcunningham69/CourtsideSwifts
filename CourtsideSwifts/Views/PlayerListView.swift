@@ -24,13 +24,13 @@ struct PlayerListView: View {
                     
                     // Toggle for name/email search
                     Toggle(isOn: $viewModel.isEmailSearch) {
-                        Text(viewModel.isEmailSearch ? "Search by Email" : "Search by Name")
+                        Text(viewModel.isEmailSearch ? "Show Grade" : "Show Email")
                             .font(.subheadline)
                     }
                     .padding(.horizontal)
                     
                     // Search Field
-                    TextField(viewModel.isEmailSearch ? "Search by Email" : "Search by Name", text: $viewModel.searchText)
+                    TextField(viewModel.isEmailSearch ? "Show Grade" : "Show Email", text: $viewModel.searchText)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding(.horizontal)
                     
