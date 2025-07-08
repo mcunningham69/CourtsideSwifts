@@ -111,6 +111,29 @@ class PlayerApiService: ObservableObject {
         let (_, response) = try await URLSession.shared.data(for: request)
         return (response as? HTTPURLResponse)?.statusCode == 200
     }
+    
+    func resetLocalData() async throws {
+        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = PlayerStatus.fetchRequest()
+        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+
+        try context.execute(deleteRequest)
+        try context.save()
+    }
+    
+    @MainActor
+    func resetAndFetchFreshData() async {
+        isSyncing = true
+        do {
+            try await resetLocalData()
+            try await fetchAndStorePlayers(context: context)
+            print("✅ Core Data reset and fresh sync complete.")
+        } catch {
+            print("❌ Reset & sync failed: \(error.localizedDescription)")
+        }
+        isSyncing = false
+    }
+
+
 
 }
 

@@ -30,7 +30,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
     var isChosen: Bool
     var isAdmin: Bool
     var courtNo: Int32
-    var attendingSession: Bool
+    var attendingSession: Bool?
     var firstVisit: Date?
     var lastVisit: Date?
     var startedAt: String?
@@ -39,7 +39,8 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
     var squareID: String?
     var gameID: Int32
     var playerCategories: Int
-    var needsSync: Bool
+    var durationInSeconds: Int32
+    var needsSync: Bool? = false
     
     //UUID converted from integer
     static func uuid(from id: Int32) -> UUID{
@@ -75,7 +76,8 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         case squareID = "squareid"
         case gameID = "gameid"
         case playerCategories = "playercategories"
-        case needsSync = "needssync"
+        case needsSync = "needsSync"
+        case durationInSeconds = "duartioninseconds"
     }
     
     init(from decoder: Decoder) throws {
@@ -111,8 +113,9 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         isChosen = try decodeBool(forKey: .isChosen)
         isAdmin = try decodeBool(forKey: .isAdmin)
         courtNo = try container.decode(Int32.self, forKey: .courtNo)
-        attendingSession = try decodeBool(forKey: .attendingSession)
-        needsSync = try decodeBool(forKey: .needsSync)
+        attendingSession = try container.decodeIfPresent(Bool.self,forKey: .attendingSession)
+        needsSync = try container.decodeIfPresent(Bool.self, forKey: .needsSync)
+
 
         // ✅ Manually decode and format date strings
         if let firstVisitStr = try container.decodeIfPresent(String.self, forKey: .firstVisit) {
@@ -179,6 +182,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         self.gameID = Int32(entity.gameID)
         self.playerCategories = Int(entity.playerCategories)
         self.needsSync = entity.needsSync
+        self.durationInSeconds = entity.durationInSeconds
     }
     
     func toEntity(context: NSManagedObjectContext) -> PlayerStatus {
@@ -201,7 +205,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         entity.isChosen = self.isChosen
         entity.isAdmin = self.isAdmin
         entity.courtNo = Int32(self.courtNo)
-        entity.attendingSession = self.attendingSession
+        entity.attendingSession = self.attendingSession ?? false
         entity.firstVisit = self.firstVisit
         entity.lastVisit = self.lastVisit
         entity.startedAt = self.startedAt
@@ -210,7 +214,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         entity.squareID = self.squareID
         entity.gameID = Int32(self.gameID)
         entity.playerCategories = Int32(self.playerCategories)
-        entity.needsSync = self.needsSync
+        entity.needsSync = self.needsSync ?? false
         
         return entity
     }

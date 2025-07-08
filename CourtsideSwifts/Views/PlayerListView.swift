@@ -48,6 +48,7 @@ struct PlayerListView: View {
                         VStack(alignment: .leading) {
                             Text(player.playerName ?? "Unnamed Player")
                                 .font(.headline)
+                                .foregroundColor((player.attendingSession) ? .orange : .primary)
                             
                             if player.isTopRank {
                                 Image(systemName: "star.fill")
@@ -95,6 +96,14 @@ struct PlayerListView: View {
                             viewModel.checkOutSelected()
                         }
                         .buttonStyle(.bordered)
+                        
+                        Button("Reset & Sync"){
+                            Task{
+                                await apiService.resetAndFetchFreshData()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .foregroundColor(.red)
                     }
                     
                     Spacer().frame(height: 10)
