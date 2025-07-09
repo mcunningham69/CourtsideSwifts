@@ -37,7 +37,7 @@ struct MainSessionSplitView: View {
                         case "PlayingSession":
                             PlayingSessionView(viewModel: sessionVM)
                         case "CourtSession":
-                            CourtSessionView(sessionViewModel: sessionVM)
+                            CourtListView(courtsViewModel: courtsVM, sessionViewModel: sessionVM)
                         default:
                             EmptyView()
                         }
@@ -51,6 +51,7 @@ struct MainSessionSplitView: View {
         #endif
     }
 
+
     private var splitViewLayout: some View {
         NavigationSplitView {
             PlayerListView(viewModel: listVM, sessionViewModel: sessionVM)
@@ -61,7 +62,7 @@ struct MainSessionSplitView: View {
                         Label("Session", systemImage: "person.3")
                     }
 
-                CourtSessionView(sessionViewModel: sessionVM)
+                CourtListView(courtsViewModel: courtsVM, sessionViewModel: sessionVM)
                     .tabItem {
                         Label("Courts", systemImage: "sportscourt")
                     }
