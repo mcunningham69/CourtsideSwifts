@@ -4,8 +4,21 @@ import CoreData
 
 @MainActor
 class PlayingSessionViewModel: ObservableObject {
+    @Published var courts: [CourtSession] = []
+
+    var activeCourts: [CourtSession] {
+        courts.filter { $0.isActive }
+    }
+
     @Published var groupedParticipants: [PlayersByCategory] = []
     @Published var playerToTimeout: PlayerStatusDTO? = nil
+    @Published var useGradeFilter: Bool = true {
+        didSet {
+            // Refresh UI if needed
+            objectWillChange.send()
+        }
+    }
+
 
 
     private let context = PersistenceController.shared.container.viewContext
@@ -114,6 +127,10 @@ class PlayingSessionViewModel: ObservableObject {
     }*/
 
     func isSelectableForChooser(_ target: PlayerStatusDTO) -> Bool {
+        
+        if !useGradeFilter, !useGradeFilter {
+            return true
+        }
         guard let chooser = groupedParticipants
             .flatMap({ $0.players })
             .first(where: { $0.isChoosing }) else {
@@ -317,6 +334,26 @@ class PlayingSessionViewModel: ObservableObject {
     }
 
 
+    func moveChosenToPlaying() {
+        let context = PersistenceController.shared.container.viewContext
+
+        for group in groupedParticipants {
+            for player in group.players where player.categoryEnum == .chosen {
+                let entity = PlayerStatusDTO.createOrUpdate(from: player, in: context)
+                entity.playerCategories = Int32(PlayerCategory.playing.rawValue)
+                entity.isChosen = false
+                entity.isChoosing = false
+            }
+        }
+
+        do {
+            try context.save()
+            print("✅ Moved Chosen players to Playing")
+            loadParticipantsFromCoreData()
+        } catch {
+            print("❌ Failed to update player status: \(error)")
+        }
+    }
 
 
 }

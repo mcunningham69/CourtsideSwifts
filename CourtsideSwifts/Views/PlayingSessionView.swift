@@ -9,7 +9,7 @@ import SwiftUI
 struct PlayingSessionView: View {
     @ObservedObject var viewModel: PlayingSessionViewModel
     @State private var showTimeoutConfirmation = false
-
+    
     
     var body: some View {
         ZStack(alignment: .top){
@@ -54,6 +54,10 @@ struct PlayingSessionView: View {
                         }
                         .padding(.horizontal)
                     }
+                    Toggle("Use Grade Filter", isOn: $viewModel.useGradeFilter)
+                        .toggleStyle(.switch)
+                        .padding(.horizontal)
+                    
                     
                     // 🔽 Main Grouped List
                     List {
@@ -64,34 +68,28 @@ struct PlayingSessionView: View {
                                     
                                     ForEach(group.players) { player in
                                         let showTimeout = ["Waiting", "Playing", "Chosen"].contains(group.category)
-                                        
+                                        let isEligible = viewModel.isSelectableForChooser(player)
+                                        let isSelected = viewModel.selectedWaitingPlayers.contains(player.id)
                                         // Base row
                                         let baseRow: some View = Group {
                                             if group.category == "Waiting" && !player.isChoosing {
                                                 PlayerRowView(player: player)
                                                     .contentShape(Rectangle())
                                                     .onTapGesture {
-                                                        let isEligible = viewModel.isSelectableForChooser(player)
+                                                        // let isEligible = viewModel.isSelectableForChooser(player)
                                                         print("👆 Tap on \(player.playerName ?? "Unnamed") — Eligible: \(isEligible)")
                                                         if isEligible {
                                                             viewModel.toggleSelection(for: player)
                                                         }
                                                     }
-
-                                                    .background(
-                                                        viewModel.selectedWaitingPlayers.contains(player.id)
-                                                        ? Color.blue.opacity(0.2)
-                                                        : Color.clear
-                                                    )
-                                                    .opacity(viewModel.isSelectableForChooser(player) ? 1.0 : 0.3)
-                                                    .help(
-                                                        viewModel.isSelectableForChooser(player)
-                                                        ? ""
-                                                        : "Not eligible for selection"
-                                                    )
+                                                
+                                                    .background(isSelected ? Color.blue.opacity(0.2) : Color.clear)
+                                                    .opacity(isEligible ? 1.0 : 0.3)
+                                                    .help(isEligible ? "" : "Not eligible for selection")
+                                                
                                             }
-
-
+                                            
+                                            
                                             else {
                                                 PlayerRowView(player: player)
                                             }
