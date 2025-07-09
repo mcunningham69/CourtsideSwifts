@@ -1,5 +1,6 @@
 # Xcode
 *.xcuserstate
+xcuserdata/
 DerivedData/
 build/
 *.pbxuser
