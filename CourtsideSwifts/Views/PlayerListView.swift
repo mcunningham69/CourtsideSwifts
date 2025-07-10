@@ -7,6 +7,7 @@
 
 
 import SwiftUI
+import Combine
 
 struct PlayerListView: View {
     @ObservedObject var viewModel: PlayerListViewModel
@@ -14,6 +15,11 @@ struct PlayerListView: View {
 
     @State private var showSession = false
     @StateObject private var apiService = PlayerApiService.shared
+
+    private var isPhone: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone
+        && !ProcessInfo.processInfo.isMacCatalystApp
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -29,9 +35,7 @@ struct PlayerListView: View {
                 TextField(viewModel.isEmailSearch ? "Search.." : "Search..", text: $viewModel.searchText)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .padding(.horizontal)
-                    .onTapGesture {
-                        hideKeyboard()
-                    }
+                    .onTapGesture { hideKeyboard() }
 
                 // Sort Picker
                 Picker("Sort by", selection: $viewModel.sortMode) {
@@ -47,7 +51,7 @@ struct PlayerListView: View {
                     VStack(alignment: .leading) {
                         Text(player.playerName ?? "Unnamed Player")
                             .font(.headline)
-                            .foregroundColor(player.attendingSession ? .orange : .primary)
+                            .foregroundColor(player.attendingSession ? .red : .primary)
                             .animation(.easeIn, value: player.attendingSession)
 
                         if player.isTopRank {
@@ -66,19 +70,15 @@ struct PlayerListView: View {
                         }
                     }
                 }
-                .environment(\.editMode, .constant(.active)) // enable multiselect
+                .environment(\.editMode, .constant(.active))
                 .frame(maxHeight: .infinity)
-
-                Spacer()
 
                 // Add new player row
                 HStack {
                     TextField("New Player Name", text: $viewModel.newPlayerName)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
 
-                    Button("Add") {
-                        viewModel.addPlayer()
-                    }
+                    Button("Add") { viewModel.addPlayer() }
                 }
                 .padding(.horizontal)
 
@@ -86,7 +86,7 @@ struct PlayerListView: View {
                 HStack {
                     Button("Check In") {
                         viewModel.checkInSelected()
-                        Task{
+                        Task {
                             try? await Task.sleep(nanoseconds: 300_000_000)
                             sessionViewModel.loadParticipantsFromCoreData()
                         }
@@ -95,7 +95,7 @@ struct PlayerListView: View {
 
                     Button("Done") {
                         viewModel.checkOutSelected()
-                        Task{
+                        Task {
                             try? await Task.sleep(nanoseconds: 300_000_000)
                             sessionViewModel.loadParticipantsFromCoreData()
                         }
@@ -103,40 +103,31 @@ struct PlayerListView: View {
                     .buttonStyle(.bordered)
 
                     Button("Reset") {
-                        Task {
-                            await apiService.resetAndFetchFreshData()
-                        }
+                        Task { await apiService.resetAndFetchFreshData() }
                     }
                     .buttonStyle(.bordered)
                     .foregroundColor(.red)
-                    
-                   /* //DEBUG ONLY
-                    Button("Reset Core Data") {
-                        viewModel.resetDatabaseForTesting()
-                    }*/
-
                 }
 
-                // 🚀 Go to Playing Session Button (iPhone)
-                Button("Go to Session") {
-                    showSession = true
-                    sessionViewModel.loadParticipantsFromCoreData()
+                // iPhone: navigate to session
+                if isPhone {
+                    Button("Go to Session") {
+                        showSession = true
+                        sessionViewModel.loadParticipantsFromCoreData()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .padding(.top)
                 }
-                .buttonStyle(.borderedProminent)
-                .padding(.top)
 
                 Spacer().frame(height: 10)
             }
             .padding()
-            .navigationTitle("Add Players")
-            .onAppear {
-                viewModel.loadFromCoreData()
-            }
+            .navigationTitle("Players")
             .navigationDestination(isPresented: $showSession) {
                 PlayingSessionView(viewModel: sessionViewModel)
             }
 
-            // 🔽 Syncing Banner
+            // Sync banner
             if apiService.isSyncing {
                 HStack {
                     ProgressView()
@@ -155,7 +146,14 @@ struct PlayerListView: View {
                 .animation(.easeInOut(duration: 0.3), value: apiService.isSyncing)
             }
         }
+        // reload on appear or session changes
+        .onAppear { viewModel.loadFromCoreData() }
+        .onReceive(NotificationCenter.default.publisher(for: .refreshSession)) { _ in
+            viewModel.loadFromCoreData()
+        }
+
         
+        // Info toast
         if let message = viewModel.infoMessage {
             Text(message)
                 .padding()
@@ -168,14 +166,15 @@ struct PlayerListView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(.easeInOut(duration: 0.3), value: viewModel.infoMessage)
         }
-        
-
     }
-
-    
-
 }
 
+#Preview {
+    PlayerListView(
+        viewModel: PlayerListViewModel(),
+        sessionViewModel: PlayingSessionViewModel(refreshTrigger: Just(()).eraseToAnyPublisher())
+    )
+}
 
 
 

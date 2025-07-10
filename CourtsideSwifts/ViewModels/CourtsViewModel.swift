@@ -7,19 +7,22 @@
 
 import Foundation
 import Combine
+import CoreData
 
 @MainActor
 class CourtsViewModel: ObservableObject {
     let refreshTrigger = PassthroughSubject<Void, Never>()
     
-    @Published var courtSessions: [CourtSession] = []
+    @Published var courts: [CourtSession] = []
+    
     private var timerCancellable: AnyCancellable?
 
     init() {
         // Create 3 default courts on load
         for i in 1...3 {
             let court = CourtSession(courtNumber: i)
-            courtSessions.append(court)
+            
+            courts.append(court)
         }
 
         // Timer to update countdowns every second
@@ -30,47 +33,117 @@ class CourtsViewModel: ObservableObject {
                 self?.objectWillChange.send()
             }
     }
+    
+    func startPlay(on court: CourtSession, from sessionViewModel: PlayingSessionViewModel) async {
+        guard court.players.count == 4 else { return }
+        let context = PersistenceController.shared.container.viewContext
 
-    func startCourt(_ court: CourtSession, with players: [PlayerStatusDTO]) {
-        if let index = courtSessions.firstIndex(where: { $0.id == court.id }) {
-            courtSessions[index].players = players
-            courtSessions[index].isActive = true
-            courtSessions[index].startTime = Date()
+        await context.perform {
+            for var playerDTO in court.players {
+                let fetch: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+                fetch.predicate = NSPredicate(format: "playerID == %d", playerDTO.playerID)
+
+                if let entity = try? context.fetch(fetch).first {
+                    entity.playerCategories = Int32(PlayerCategory.playing.rawValue)
+                    entity.isChosen = false
+                    entity.isPlaying = true
+                    entity.isWaiting = false
+                    entity.gamesCount += 1
+                    
+                    playerDTO.gamesCount = entity.gamesCount
+                    
+                    entity.courtNo = Int32(court.courtNumber)
+                    entity.startedAt = ISO8601DateFormatter().string(from: Date())
+                    entity.needsSync = true
+                }
+            }
+
+            try? context.save()
         }
+
+        // 🔁 Update local court model
+        if let idx = courts.firstIndex(where: { $0.id == court.id }) {
+            courts[idx].isActive = true
+            courts[idx].startTime = Date()
+        }
+
+        // 🔁 Update session view model to reflect move from Chosen to Playing
+        sessionViewModel.loadParticipantsFromCoreData()
+
+        // 🔔 Notify UI
+        refreshTrigger.send()
     }
 
+
+
+    /// Stops play on the given court and moves players back to waiting
+    func stopPlay(on court: CourtSession) async {
+        let context = PersistenceController.shared.container.viewContext
+        let fetchAll: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+        fetchAll.predicate = NSPredicate(format: "attendingSession == true")
+
+        do {
+            var allEntities = try context.fetch(fetchAll)
+            let maxOrder = allEntities.map { $0.orderOfPlay }.max() ?? 0
+            var nextOrder = maxOrder + 1
+
+            for dto in court.players {
+                if let entity = allEntities.first(where: { $0.playerID == dto.playerID }) {
+                    entity.playerCategories = Int32(PlayerCategory.waiting.rawValue)
+                    entity.isPlaying = false
+                    entity.isChosen = false
+                    entity.warmingUp = false
+                    let fmt = DateFormatter()
+                    fmt.dateFormat = "HH:mm:ss"
+                    entity.finishedAt = fmt.string(from: Date())
+                    entity.orderOfPlay = nextOrder
+                    entity.needsSync = true
+                    nextOrder += 1
+                }
+            }
+
+            try context.save()
+        } catch {
+            print("❌ Stop play failed: \(error)")
+        }
+
+        // Update local model
+        if let idx = courts.firstIndex(where: { $0.id == court.id }) {
+            courts[idx].isActive = false
+            courts[idx].startTime = nil
+            courts[idx].players.removeAll()
+        }
+
+        // Notify listeners
+        refreshTrigger.send()
+    }
+    
+ 
+
     func resetCourt(_ court: CourtSession) {
-        if let index = courtSessions.firstIndex(where: { $0.id == court.id }) {
-            courtSessions[index].players.removeAll()
-            courtSessions[index].isActive = false
-            courtSessions[index].startTime = nil
+        if let index = courts.firstIndex(where: { $0.id == court.id }) {
+            courts[index].players.removeAll()
+            courts[index].isActive = false
+            courts[index].startTime = nil
         }
     }
     
-    func stopGame(for court: CourtSession) {
-        var court = court
-        
-        let context = PersistenceController.shared.container.viewContext
-
-        for player in court.players {
-            let entity = PlayerStatusDTO.createOrUpdate(from: player, in: context)
-            entity.playerCategories = Int32(PlayerCategory.waiting.rawValue)
-            entity.isChosen = false
-            entity.isChoosing = false
-            entity.gameID = 0
-        }
-
-        court.players.removeAll()
-
-        do {
-            try context.save()
-            print("✅ Players returned to Waiting")
-        } catch {
-            print("❌ Failed to stop game: \(error)")
-        }
-
-        // Trigger UI refresh
-        refreshTrigger.send()
+    
+    func addNewCourt() {
+        let nextNumber = (courts.map { $0.courtNumber }.max() ?? 0) + 1
+        courts.append(CourtSession(courtNumber: nextNumber))
     }
+
+    /// Removes the last court, if any
+    func removeLastCourt() {
+        guard !courts.isEmpty else { return }
+        courts.removeLast()
+    }
+
+    /// Removes a specific court by its ID
+    func removeCourt(_ court: CourtSession) {
+        courts.removeAll { $0.id == court.id }
+    }
+
 
 }

@@ -1,47 +1,66 @@
-//
-//  NavigationSplitView.swift
-//  CourtsideSwifts
-//
-//  Created by Michael Cunningham on 8/7/2025.
-//
-
 import SwiftUI
 import Combine
 
-struct MainSessionSplitView: View {
-    @StateObject private var listVM: PlayerListViewModel
-    @StateObject private var sessionVM: PlayingSessionViewModel
-    @StateObject private var courtsVM = CourtsViewModel()
-    
+
+
+extension Notification.Name {
+    static let refreshSession = Notification.Name("refreshSession")
+}
+
+struct MainSplitView: View {
+    @StateObject private var playerListViewModel = PlayerListViewModel()
+    @StateObject private var playingSessionViewModel: PlayingSessionViewModel
+    @StateObject private var courtsViewModel = CourtsViewModel()
+
+    // Maintain navigation path for iPhone
+    @State private var path: [Route] = []
+
     init() {
-        let listVM = PlayerListViewModel()
-        _listVM = StateObject(wrappedValue: listVM)
-        _sessionVM = StateObject(wrappedValue:
-            PlayingSessionViewModel(
-                refreshTrigger: listVM.refreshSessionPublisher.eraseToAnyPublisher()
-            )
-        )
+        let refreshPublisher = NotificationCenter.default
+            .publisher(for: .refreshSession)
+            .map { _ in () }
+            .eraseToAnyPublisher()
         
-        // Initialize Courts VM
-                _courtsVM = StateObject(wrappedValue: CourtsViewModel())
+        _playingSessionViewModel = StateObject(
+            wrappedValue: PlayingSessionViewModel(refreshTrigger: refreshPublisher)
+        )
     }
-    
 
     var body: some View {
         #if os(iOS)
         if UIDevice.current.userInterfaceIdiom == .phone {
-            NavigationStack {
-                PlayerListView(viewModel: listVM, sessionViewModel: sessionVM)
-                    .navigationDestination(for: String.self) { destination in
-                        switch destination {
-                        case "PlayingSession":
-                            PlayingSessionView(viewModel: sessionVM)
-                        case "CourtSession":
-                            CourtListView(courtsViewModel: courtsVM, sessionViewModel: sessionVM)
-                        default:
-                            EmptyView()
+            NavigationStack(path: $path) {
+                PlayerListView(
+                    viewModel: playerListViewModel,
+                    sessionViewModel: playingSessionViewModel
+                )
+                .onAppear {
+                    playerListViewModel.loadFromCoreData()
+                }
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            path.append(.courts)
+                        } label: {
+                            Label("Courts", systemImage: "sportscourt")
                         }
                     }
+                }
+                .navigationDestination(for: Route.self) { route in
+                    switch route {
+                    case .playingSession:
+                        PlayingSessionView(viewModel: playingSessionViewModel)
+                            .onAppear {
+                                playingSessionViewModel.loadParticipantsFromCoreData()
+                            }
+                        
+                    case .courts:
+                        CourtListView(
+                            viewModel: courtsViewModel,
+                            sessionViewModel: playingSessionViewModel
+                        )
+                    }
+                }
             }
         } else {
             splitViewLayout
@@ -51,22 +70,34 @@ struct MainSessionSplitView: View {
         #endif
     }
 
-
     private var splitViewLayout: some View {
         NavigationSplitView {
-            PlayerListView(viewModel: listVM, sessionViewModel: sessionVM)
-        } detail: {
-            TabView {
-                PlayingSessionView(viewModel: sessionVM)
-                    .tabItem {
-                        Label("Session", systemImage: "person.3")
-                    }
-
-                CourtListView(courtsViewModel: courtsVM, sessionViewModel: sessionVM)
-                    .tabItem {
-                        Label("Courts", systemImage: "sportscourt")
-                    }
+            PlayerListView(
+                viewModel: playerListViewModel,
+                sessionViewModel: playingSessionViewModel
+            )
+            .onAppear { playerListViewModel.loadFromCoreData() }
+            .onReceive(NotificationCenter.default.publisher(for: .refreshSession)) { _ in
+                playerListViewModel.loadFromCoreData()
             }
+        } content: {
+            PlayingSessionView(viewModel: playingSessionViewModel)
+                .onAppear { playingSessionViewModel.loadParticipantsFromCoreData() }
+        } detail: {
+            CourtListView(
+                viewModel: courtsViewModel,
+                sessionViewModel: playingSessionViewModel
+            )
         }
     }
 }
+
+// MARK: - Routing Enum
+private enum Route: Hashable {
+    case playingSession, courts
+}
+
+#Preview {
+    MainSplitView()
+}
+

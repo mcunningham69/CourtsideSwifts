@@ -322,11 +322,16 @@ extension PlayerStatusDTO {
         request.predicate = NSPredicate(format: "playerID == %d", dto.playerID)
 
         if let existing = try? context.fetch(request).first {
+            // ✅ Update fields if already exists
+            existing.gamesCount = Int32(dto.gamesCount)
+            // Update other properties here if needed
             return existing
         } else {
+            // ✅ Create new entity
             return dto.toEntity(context: context)
         }
     }
+
 }
 
 extension PlayerStatusDTO {

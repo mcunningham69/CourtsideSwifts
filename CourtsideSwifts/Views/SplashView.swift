@@ -13,7 +13,8 @@ struct SplashView: View {
     var body: some View {
         Group {
             if isActive {
-                MainSessionSplitView()
+                //MainSessionContainerView()
+                MainSplitView()
                     .environment(\.managedObjectContext, persistenceController.container.viewContext)
             } else {
                 VStack {

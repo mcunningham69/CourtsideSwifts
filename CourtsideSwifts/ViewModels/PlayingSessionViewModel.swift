@@ -5,13 +5,15 @@ import CoreData
 @MainActor
 class PlayingSessionViewModel: ObservableObject {
     @Published var courts: [CourtSession] = []
-
     var activeCourts: [CourtSession] {
         courts.filter { $0.isActive }
     }
 
-    @Published var groupedParticipants: [PlayersByCategory] = []
+   // @Published var groupedParticipants: [PlayersByCategory] = []
+    var groupedParticipants: [ParticipantSection] = []
+
     @Published var playerToTimeout: PlayerStatusDTO? = nil
+    @Published var nextPlayOrder: Int = 0
     @Published var useGradeFilter: Bool = true {
         didSet {
             // Refresh UI if needed
@@ -19,34 +21,166 @@ class PlayingSessionViewModel: ObservableObject {
         }
     }
 
-
-
     private let context = PersistenceController.shared.container.viewContext
     private var cancellables = Set<AnyCancellable> ()
     @Published var selectedWaitingPlayers: Set<UUID> = []
 
-    
-    //subscribe
-    init(refreshTrigger: AnyPublisher<Void, Never>){
-        //subscribe to refresh signal
+    /// Subscribes to a refresh trigger, loads participants, and seeds play order
+    init(refreshTrigger: AnyPublisher<Void, Never>) {
+        // Initial load and seed
+        loadParticipantsFromCoreData()
+        seedNextPlayOrder()
+
+        // Subscribe to external refresh and reseed
         refreshTrigger
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.loadParticipantsFromCoreData()
+                guard let self = self else { return }
+                self.loadParticipantsFromCoreData()
+                self.seedNextPlayOrder()
             }
-        
             .store(in: &cancellables)
     }
+    
+    
+    /// Seed nextPlayOrder based on highest existing order
+    private func seedNextPlayOrder() {
+        let orders: [Int] = groupedParticipants
+            .flatMap { $0.players }
+            .compactMap {Int( $0.orderOfPlay) }
+        nextPlayOrder = orders.max() ?? 0
 
+    }
+    
+    func randomlySelectTeam() {
+        guard let waitingGroup = groupedParticipants.first(where: { $0.category == "Waiting" }) else { return }
+
+        // Get the chooser
+        guard let chooser = waitingGroup.players.first(where: { $0.isChoosing }) else { return }
+
+        // Get eligible players excluding chooser
+        let eligibleOthers = waitingGroup.players
+            .filter { $0.id != chooser.id && isSelectableForChooser($0) }
+
+        // Shuffle and pick 3
+        let selected = Array(eligibleOthers.shuffled().prefix(3))
+
+        // Update the selection
+        selectedWaitingPlayers = Set(selected.map { $0.id })
+    }
+
+    
+    /// Persist a single player's DTO to Core Data and reload
+    func updatePlayer(_ player: PlayerStatusDTO) {
+        let entity = PlayerStatus.createOrUpdate(from: player, in: context)
+        entity.playerCategories = Int32(player.playerCategories)
+        entity.orderOfPlay      = Int32(player.orderOfPlay)
+        entity.gameID           = player.gameID
+        do {
+            try context.save()
+            loadParticipantsFromCoreData()
+        } catch {
+            print("Failed to save player update: \(error)")
+        }
+    }
+    
+    /// Confirm the chooser and selected waiting players as a new "Chosen" team
+            /// Confirm the chooser (auto-selected) and selected waiting players as a new "Chosen" team
+        func confirmChooserSelection() {
+            // Auto-pick chooser: lowest orderOfPlay in "Waiting"
+            guard let waitingSection = groupedParticipants.first(where: { $0.category == "Waiting" }),
+                  let chooserDTO = waitingSection.players.min(by: { $0.orderOfPlay < $1.orderOfPlay })
+            else { return }
+
+            // Gather selected waiting DTOs
+            let selectedDTOs = groupedParticipants.flatMap { $0.players }
+                .filter { selectedWaitingPlayers.contains($0.id) }
+
+            // Build the team: chooser + selected
+            let teamDTOs = [chooserDTO] + selectedDTOs
+
+            // Compute next gameID (one higher than existing max)
+            let allGameIDs = groupedParticipants.flatMap { $0.players }.map { $0.gameID }
+            let maxGameID = allGameIDs.max() ?? 0
+            let nextGameID: Int32 = maxGameID + 1
+
+            // Update each DTO to Chosen
+            for var dto in teamDTOs {
+                dto.playerCategories = PlayerCategory.chosen.rawValue
+                dto.isChosen         = true
+                dto.isChoosing       = false
+                dto.gameID           = nextGameID
+                updatePlayer(dto)
+            }
+
+            // Reset selection state
+            selectedWaitingPlayers.removeAll()
+
+            // Refresh data and reseed play order
+            loadParticipantsFromCoreData()
+            seedNextPlayOrder()
+            
+            objectWillChange.send()
+
+        }
+
+    
+    
+    // MARK: - Sync Methods
+        func syncWithTimeout(seconds: Double = 10.0) async {
+            showSyncBanner = true
+            defer { showSyncBanner = false }
+
+            do {
+                try await withTimeout(seconds: seconds) {
+                    await self.performCloudSync()
+                }
+                print("✅ Sync successful")
+            } catch {
+                print("⏱️ Sync timeout or failed: \(error.localizedDescription)")
+            }
+        }
+
+        private func performCloudSync() async {
+            do{
+                try await PlayerApiService.shared.fetchAndStorePlayers(context: context)
+            } catch {
+                print("❌ Error during cloud sync: \(error.localizedDescription)")
+            }
+
+            loadParticipantsFromCoreData()
+        }
+
+        private func withTimeout<T>(
+            seconds: Double,
+            operation: @escaping () async throws -> T
+        ) async throws -> T {
+            try await withThrowingTaskGroup(of: T.self) { group in
+                group.addTask { try await operation() }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                    throw URLError(.timedOut)
+                }
+
+                let result = try await group.next()!
+                group.cancelAll()
+                return result
+            }
+        }
+
+    
+
+    /// Loads participants from Core Data into groupedParticipants
     func loadParticipantsFromCoreData() {
         let request: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
         request.predicate = NSPredicate(format: "attendingSession == true")
-        
+        NotificationCenter.default.post(name: .refreshSession, object: nil)
+
         do {
             let players = try context.fetch(request).map { PlayerStatusDTO(from: $0) }
-            
-            var groups: [PlayersByCategory] = []
-            
+
+            var groups: [ParticipantSection] = []
+
             for category in PlayerCategory.allCases {
                 let filtered = players
                     .filter { $0.categoryEnum == category }
@@ -58,49 +192,57 @@ class PlayingSessionViewModel: ObservableObject {
                             return $0.gameID < $1.gameID
                         }
                     })
-                
-                if category == .chosen {
-                    // Add placeholder header for "Chosen"
-                    groups.append(
-                        PlayersByCategory(
-                            category: "Chosen",
-                            players: [],
-                            isSelectable: false
-                        )
-                    )
 
-                    // Then split into teams
+                if category == .chosen {
+                    groups.append(ParticipantSection(category: "Chosen", players: []))
                     let groupedByGameID = Dictionary(grouping: filtered) { $0.gameID }
                     for (gameID, playersInGame) in groupedByGameID.sorted(by: { $0.key < $1.key }) {
                         groups.append(
-                            PlayersByCategory(
-                                category: "Team \(gameID)",
-                                players: playersInGame,
-                                isSelectable: false
-                            )
+                            ParticipantSection(category: "Team \(gameID)", players: playersInGame)
                         )
                     }
-                }
-
-                else {
-                    // ✅ Default group handling
-                    let isSelectable = (category == .waiting || category == .pending)
-                    
+                } else {
                     groups.append(
-                        PlayersByCategory(
-                            category: category.displayName,
-                            players: filtered,
-                            isSelectable: isSelectable
-                        )
+                        ParticipantSection(category: category.displayName, players: filtered)
                     )
                 }
             }
-            
+
             self.groupedParticipants = groups
+
+            // 🔁 Enforce chooser logic
+            let allPlayers = groups.flatMap { $0.players }
+            let waitingPlayers = allPlayers.filter { $0.categoryEnum == .waiting }
+            let nonWaitingPlayers = allPlayers.filter { $0.categoryEnum != .waiting }
+
+            var chooserAssigned = false
+
+            for player in nonWaitingPlayers {
+                if player.isChoosing {
+                    let entity = PlayerStatusDTO.createOrUpdate(from: player, in: context)
+                    entity.isChoosing = false
+                }
+            }
+
+            for player in waitingPlayers.sorted(by: { $0.orderOfPlay < $1.orderOfPlay }) {
+                let entity = PlayerStatusDTO.createOrUpdate(from: player, in: context)
+                if !chooserAssigned {
+                    entity.isChoosing = true
+                    chooserAssigned = true
+                    print("🟡 Assigned chooser: \(player.playerName ?? "")")
+                } else {
+                    entity.isChoosing = false
+                }
+            }
+
+            try context.save()
+
         } catch {
-            print("❌ Failed to fetch attending players: \(error.localizedDescription)")
+            print("❌ Failed to load participants: \(error.localizedDescription)")
         }
     }
+
+
     
     func toggleSelection(for player: PlayerStatusDTO) {
         let isEligible = isSelectableForChooser(player)
@@ -114,17 +256,6 @@ class PlayingSessionViewModel: ObservableObject {
             selectedWaitingPlayers.insert(player.id)
         }
     }
-
-
- /*   func toggleSelection(for player: PlayerStatusDTO) {
-        guard player.categoryEnum == .waiting else { return }
-
-        if selectedWaitingPlayers.contains(player.id) {
-            selectedWaitingPlayers.remove(player.id)
-        } else if selectedWaitingPlayers.count < 3 {
-            selectedWaitingPlayers.insert(player.id)
-        }
-    }*/
 
     func isSelectableForChooser(_ target: PlayerStatusDTO) -> Bool {
         
@@ -179,83 +310,46 @@ class PlayingSessionViewModel: ObservableObject {
 
 
     }
-
-
-
-
-
     
-    func confirmChooserSelection() {
-        guard selectedWaitingPlayers.count == 3 else { return }
 
-        let allPlayers = groupedParticipants.flatMap { $0.players }
-        guard let chooser = allPlayers.first(where: { $0.isChoosing }) else { return }
-        
-        let selectedPlayers = allPlayers.filter { selectedWaitingPlayers.contains($0.id) }
+    func canStartCourt(_ court: CourtSession, activeCourts: [CourtSession]) -> Bool {
+        let alreadyAssignedIDs = activeCourts.flatMap { $0.players.map(\.id) }
 
-        let group = [chooser] + selectedPlayers
+        let availableChosenTeams = groupedParticipants
+            .filter { $0.category.starts(with: "Team ") }
+            .map { $0.players }
+            .filter { team in
+                team.count == 4 && !team.contains(where: { alreadyAssignedIDs.contains($0.id) })
+            }
 
-        let isValid = selectedPlayers.allSatisfy { target in
-            canChoose(chooser: chooser, target: target, groupSoFar: group)
-        }
-
-        guard isValid else {
-            print("❌ Invalid selection: one or more players exceed allowed grade difference")
-            return
-        }
+        return !availableChosenTeams.isEmpty
+    }
 
 
-        let context = PersistenceController.shared.container.viewContext
-        
-        // 0. Get next gameID
-        let gameIDFetch: NSFetchRequest<NSFetchRequestResult> = NSFetchRequest(entityName: "PlayerStatus")
-        gameIDFetch.resultType = .dictionaryResultType
-        gameIDFetch.propertiesToFetch = ["gameID"]
-        gameIDFetch.sortDescriptors = [NSSortDescriptor(key: "gameID", ascending: false)]
-        gameIDFetch.fetchLimit = 1
+    func nextTeamForCourt(_ court: CourtSession, activeCourts: [CourtSession]) -> [PlayerStatusDTO]? {
+        let chosenTeams = groupedParticipants
+            .filter { $0.category.starts(with: "Team ") }
 
-        var nextGameID: Int32 = 1
-        if let result = try? context.fetch(gameIDFetch).first as? [String: Int32],
-           let maxGameID = result["gameID"] {
-            nextGameID = maxGameID + 1
-        }
+        // Extract player IDs already playing on active courts
+        let assignedPlayerIDs = Set(activeCourts.flatMap { court in
+            court.players.map { $0.id }
+        })
 
-        // 1. Move chooser + selected players to Chosen
-        let chosenIDs = selectedWaitingPlayers.union([chooser.id])
+        for team in chosenTeams {
+            let teamPlayerIDs = Set(team.players.map { $0.id })
 
-        for player in allPlayers {
-            if chosenIDs.contains(player.id) {
-                let entity = PlayerStatusDTO.createOrUpdate(from: player, in: context)
-                entity.playerCategories = Int32(PlayerCategory.chosen.rawValue)
-                entity.isChosen = true
-                entity.isChoosing = false
-                entity.gameID = nextGameID // ✅ assign team ID
+            // Must be exactly 4 and not overlap with players on court
+            if team.players.count == 4 && assignedPlayerIDs.isDisjoint(with: teamPlayerIDs) {
+                return team.players
             }
         }
 
-
-        // 2. Assign new chooser from remaining Waiting players
-        let remainingWaiting = allPlayers
-            .filter { $0.categoryEnum == .waiting && !chosenIDs.contains($0.id) }
-            .sorted(by: { $0.orderOfPlay < $1.orderOfPlay })
-
-        if let newChooser = remainingWaiting.first {
-            let entity = PlayerStatusDTO.createOrUpdate(from: newChooser, in: context)
-            entity.isChoosing = true
-        }
-
-        // 3. Save
-        do {
-            try context.save()
-            print("✅ Selection confirmed and saved.")
-        } catch {
-            print("❌ Failed to save selection: \(error)")
-        }
-
-        // 4. Reset and refresh
-        selectedWaitingPlayers.removeAll()
-        loadParticipantsFromCoreData()
+        return nil
     }
+
+
+    
+ 
     
     func timeoutPlayer(_ player: PlayerStatusDTO) {
         let context = PersistenceController.shared.container.viewContext
@@ -354,7 +448,32 @@ class PlayingSessionViewModel: ObservableObject {
             print("❌ Failed to update player status: \(error)")
         }
     }
+    
+    @MainActor
+    func syncWithCloud() async {
+        showSyncBanner = true
+        do {
+            try await withTimeout(seconds: 10.0) {
+                try await PlayerApiService.shared.fetchAndStorePlayers(context: self.context)
+            }
+            print("✅ Sync completed")
+            loadParticipantsFromCoreData()
+        } catch {
+            print("❌ Sync failed: \(error.localizedDescription)")
+        }
+        showSyncBanner = false
+    }
 
+
+    @Published var showSyncBanner = false
+
+    func triggerBanner() {
+        showSyncBanner = true
+        Task {
+            try? await Task.sleep(nanoseconds: 3 * 1_000_000_000) // 3 sec
+            showSyncBanner = false
+        }
+    }
 
 }
 

@@ -1,81 +1,109 @@
-
 import SwiftUI
+import Combine
 
 
 struct CourtListView: View {
-    @StateObject var courtsViewModel = CourtsViewModel()
-    @ObservedObject var sessionViewModel: PlayingSessionViewModel
+    @ObservedObject var viewModel: CourtsViewModel
+    var sessionViewModel: PlayingSessionViewModel
+    @State private var showEditSheet = false
+    @State private var editIndex: Int? = nil
+    @State private var newCourtNumber = ""
 
     var body: some View {
-        NavigationView {
-            List {
-                ForEach(courtsViewModel.courtSessions) { court in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Court \(court.courtNumber)")
-                                .font(.headline)
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Courts")
+                .font(.title2)
+                .bold()
+                .padding(.horizontal)
+                .padding(.top)
 
-                            if court.isActive, let time = court.timeRemaining {
-                                Spacer()
-                                Text("⏱️ \(formatTime(time))")
-                                    .foregroundColor(court.hasExpired ? .red : .primary)
-                                    .bold()
-                            }
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(viewModel.courts.indices, id: \.self) { idx in
+                        let court = viewModel.courts[idx]
+                        CourtSessionView(
+                            court: court,
+                            viewModel: viewModel,
+                            sessionViewModel: sessionViewModel
+                        )
+                        .onTapGesture {
+                            // select for editing
+                            editIndex = idx
+                            newCourtNumber = String(court.courtNumber)
+                            showEditSheet = true
                         }
-
-                        if court.players.isEmpty {
-                            Text("No players assigned")
-                                .foregroundColor(.gray)
-                        } else {
-                            ForEach(court.players, id: \.id) { player in
-                                Text(player.playerName ?? "Unnamed Player")
-                            }
-                        }
-
-                        if court.hasExpired {
-                            Text("⏰ Time's up!")
-                                .font(.caption)
-                                .foregroundColor(.red)
-                                .bold()
-                        }
-
-                        HStack {
-                            if court.isActive {
-                                Button("Stop Game") {
-                                    courtsViewModel.resetCourt(court)
-                                }
-                                .buttonStyle(.bordered)
-                                .foregroundColor(.red)
-                            } else {
-                                Button("Start Game") {
-                                    let chosenPlayers = sessionViewModel.groupedParticipants
-                                        .first(where: { $0.category == "Chosen" })?
-                                        .players ?? []
-
-                                    guard chosenPlayers.count == 4 else {
-                                        print("⚠️ You must select 4 players first.")
-                                        return
-                                    }
-
-                                    courtsViewModel.startCourt(court, with: chosenPlayers)
-
-                                    // Optional: clear chosen players afterward
-                                    sessionViewModel.moveChosenToPlaying()
-                                }
-                                .buttonStyle(.borderedProminent)
-                            }
-                        }
+                        .padding(.horizontal)
                     }
-                    .padding(.vertical, 8)
+                }
+                .padding(.bottom)
+            }
+
+            HStack(spacing: 16) {
+                Button(action: {
+                    viewModel.addNewCourt()
+                }) {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Add Court")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+
+                Button(action: {
+                    viewModel.removeLastCourt()
+                }) {
+                    HStack {
+                        Image(systemName: "minus.circle.fill")
+                        Text("Remove Court")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.red)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
                 }
             }
-            .navigationTitle("Courts")
+            .padding(.horizontal)
+            .padding(.bottom)
         }
+        .sheet(isPresented: $showEditSheet) {
+            NavigationView {
+                Form {
+                    TextField("Court Number", text: $newCourtNumber)
+                        .keyboardType(.numberPad)
+                }
+                .navigationTitle("Edit Court")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            if let idx = editIndex,
+                               let num = Int(newCourtNumber) {
+                                viewModel.courts[idx].courtNumber = num
+                            }
+                            showEditSheet = false
+                        }
+                    }
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            showEditSheet = false
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.height(200)])
+            .presentationDragIndicator(.visible)
+        }
+        .background(Color(UIColor.systemGroupedBackground))
     }
+}
 
-    func formatTime(_ interval: TimeInterval) -> String {
-        let minutes = Int(interval) / 60
-        let seconds = Int(interval) % 60
-        return String(format: "%02d:%02d", minutes, seconds)
-    }
+#Preview {
+    CourtListView(
+        viewModel: CourtsViewModel(),
+        sessionViewModel: PlayingSessionViewModel(refreshTrigger: Just(()).eraseToAnyPublisher())
+    )
 }

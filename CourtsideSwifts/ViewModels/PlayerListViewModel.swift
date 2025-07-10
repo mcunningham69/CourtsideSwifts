@@ -147,12 +147,19 @@ class PlayerListViewModel: ObservableObject {
         players.append(newDTO)
         newPlayerName = "" // Clear the input field
     }
+    
     func checkInSelected() {
-        
+        let affected = players.filter {
+            selectedPlayers.contains($0) && !$0.attendingSession
+        }
+        let checkedCount = affected.count
 
-        
-        let checkedCount = selectedPlayers.count
-        
+        guard checkedCount > 0 else {
+            selectedPlayers.removeAll()
+            applySearchFilter()
+            return
+        }
+
         let maxOrder = players
             .filter { $0.attendingSession }
             .map { $0.orderOfPlay }
@@ -160,88 +167,97 @@ class PlayerListViewModel: ObservableObject {
 
         var nextOrder = maxOrder + 1
 
-        
         for i in players.indices {
             if selectedPlayers.contains(players[i]) {
-                
-                guard players[i].attendingSession == false else { continue }
-                
+                guard !players[i].attendingSession else { continue }
+
                 players[i].attendingSession = true
+                players[i].visits += 1
                 players[i].isChosen = false
                 players[i].warmingUp = true
                 players[i].lastVisit = Date()
                 players[i].playerCategories = PlayerCategory.waiting.rawValue
                 players[i].needsSync = true
-                
                 players[i].orderOfPlay = nextOrder
                 nextOrder += 1
-                
-                updateCoreData(for: players[i] )
+
+                updateCoreData(for: players[i])
             }
         }
+
         applySearchFilter()
         selectedPlayers.removeAll()
-        
-        //Assign chooser
+
+        // Assign chooser
         for i in players.indices {
             players[i].isChoosing = false
         }
-        
+
         if let chooserIndex = players.enumerated()
             .filter ({ $0.element.attendingSession  })
-            .min(by: { $0.element.orderOfPlay < $1.element.orderOfPlay })?.offset
-        {
+            .min(by: { $0.element.orderOfPlay < $1.element.orderOfPlay })?.offset {
             players[chooserIndex].isChoosing = true
-            updateCoreData(for: players[chooserIndex] )
-            
+            updateCoreData(for: players[chooserIndex])
         }
-        
+
         infoMessage = "✅ Checked in \(checkedCount) player(s)"
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             self.infoMessage = nil
         }
-        
-        //notify session to refresh
+
         refreshSessionPublisher.send()
-        
+
         Task {
             await PlayerApiService.shared.syncPendingPlayersToAzure()
         }
-        
     }
 
+
+    
     func checkOutSelected() {
-        
-        let checkedCount = selectedPlayers.count
-        
+        let affected = players.filter {
+            selectedPlayers.contains($0) && $0.attendingSession
+        }
+        let checkedCount = affected.count
+
+        guard checkedCount > 0 else {
+            selectedPlayers.removeAll()
+            applySearchFilter()
+            return
+        }
+
         for i in players.indices {
             if selectedPlayers.contains(players[i]) {
+                guard players[i].attendingSession else { continue }
+
                 players[i].attendingSession = false
                 players[i].isChosen = false
                 players[i].warmingUp = false
                 players[i].isTimeOut = false
                 players[i].playerCategories = 0
                 players[i].needsSync = true
-                
-                updateCoreData(for: players[i] )
+                players[i].gamesCount = 0
+
+                updateCoreData(for: players[i])
             }
         }
+
         applySearchFilter()
         selectedPlayers.removeAll()
-        
+
         refreshSessionPublisher.send()
-        
+
         Task {
             await PlayerApiService.shared.syncPendingPlayersToAzure()
         }
-        
+
         infoMessage = "🛑 Checked out \(checkedCount) player(s)"
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             self.infoMessage = nil
         }
-
-
     }
+
+
 
     private func updateCoreData(for dto: PlayerStatusDTO) {
         let entity = PlayerStatus.createOrUpdate(from: dto, in: context)
