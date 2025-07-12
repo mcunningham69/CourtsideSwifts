@@ -11,6 +11,10 @@ import SwiftUI
 struct CourtsideSwiftsApp: App {
     let persistenceController = PersistenceController.shared
     @StateObject private var networkMonitor = NetworkMonitor.shared
+    
+/*   init() {
+            PersistenceController.shared.migrateLegacyTimeFormatsToISO8601()
+        }*/
 
     var body: some Scene {
         WindowGroup {

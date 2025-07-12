@@ -12,7 +12,21 @@ import Combine
 class PlayerListViewModel: ObservableObject {
     let refreshSessionPublisher = PassthroughSubject<Void, Never>() //for syncing with Azure
     @Published var infoMessage: String? = nil
-    @Published var players: [PlayerStatusDTO] = []
+    @Published var players: [PlayerStatusDTO] = [] {
+        didSet {
+            applySearchFilter()
+        }
+    }
+    
+  //  private var hasUserSetSortMode = false
+
+    @Published var sortMode: SortMode = .visits {
+        didSet {
+          //  hasUserSetSortMode = true
+            applySearchFilter()
+        }
+    }
+
     @Published var errorMessage: String?
     @Published var isLoading: Bool = false
     @Published var newPlayerName: String = ""
@@ -30,11 +44,11 @@ class PlayerListViewModel: ObservableObject {
         }
     }
     
-    @Published var sortMode: SortMode = .visits {
+   /* @Published var sortMode: SortMode = .visits {
         didSet {
             applySearchFilter()
         }
-    }
+    }*/
 
     
     
@@ -72,27 +86,64 @@ class PlayerListViewModel: ObservableObject {
             }
             return $0.attendingSession && !$1.attendingSession
         }
+        
+      //  print("🔍 Filter applied, sortMode = \(sortMode), isEmailSearch = \(isEmailSearch), searchText = \(searchText)")
+     //   print("🧑‍🤝‍🧑 Result count: \(result.count)")
+      //  for p in result {
+          //  print("• \(p.playerName ?? "-") visits=\(p.visits), attending=\(p.attendingSession)")
+       // }
+
 
         filteredPlayers = result
     }
 
+    @MainActor
+    func toggleAttendance(for player: PlayerStatusDTO) {
+        guard let index = players.firstIndex(of: player) else { return }
+
+        var updated = player
+        updated.attendingSession.toggle()
+        updated.needsSync = true
+
+        players[index] = updated
+        applySearchFilter()
+
+        Task {
+            let context = PersistenceController.shared.container.viewContext
+            await context.perform {
+                let fetch: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+                fetch.predicate = NSPredicate(format: "playerID == %d", player.playerID)
+
+                if let entity = try? context.fetch(fetch).first {
+                    entity.attendingSession = updated.attendingSession
+                    entity.needsSync = true
+                    try? context.save()
+                }
+            }
+        }
+    }
+
+    
 
     
     func loadFromCoreData() {
         let request: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
         request.sortDescriptors = [NSSortDescriptor(key: "playerName", ascending: true)]
-        
+
         do {
             let coreDataPlayers = try context.fetch(request)
             players = coreDataPlayers.map { PlayerStatusDTO(from: $0) }
-            filteredPlayers = players.sorted { $0.visits > $1.visits }
-                
-            // players = try context.fetch(request)
-            print("Core Data fetched \(players.count) players from Core Data")
+
+            //if hasUserSetSortMode {
+                applySearchFilter()
+           // } else {
+           //     filteredPlayers = players.sorted { $0.visits > $1.visits }
+          //  }
         } catch {
             errorMessage = "Failed to load local data: \(error.localizedDescription)"
         }
     }
+
     
     func fetchFromAPI() async {
         do {
@@ -148,57 +199,70 @@ class PlayerListViewModel: ObservableObject {
         newPlayerName = "" // Clear the input field
     }
     
-    func checkInSelected() {
+    @MainActor
+    func checkInSelected(sessionViewModel: PlayingSessionViewModel) async throws {
         let affected = players.filter {
             selectedPlayers.contains($0) && !$0.attendingSession
         }
-        let checkedCount = affected.count
 
+        let checkedCount = affected.count
         guard checkedCount > 0 else {
             selectedPlayers.removeAll()
             applySearchFilter()
             return
         }
 
-        let maxOrder = players
-            .filter { $0.attendingSession }
-            .map { $0.orderOfPlay }
-            .max() ?? 0
-
+        let maxOrder = players.filter(\.attendingSession)
+                              .map(\.orderOfPlay)
+                              .max() ?? 0
         var nextOrder = maxOrder + 1
 
-        for i in players.indices {
-            if selectedPlayers.contains(players[i]) {
-                guard !players[i].attendingSession else { continue }
+        // 🔁 Update DTOs in memory
+        for i in players.indices where selectedPlayers.contains(players[i]) {
+            guard !players[i].attendingSession else { continue }
 
-                players[i].attendingSession = true
-                players[i].visits += 1
-                players[i].isChosen = false
-                players[i].warmingUp = true
-                players[i].lastVisit = Date()
-                players[i].playerCategories = PlayerCategory.waiting.rawValue
-                players[i].needsSync = true
-                players[i].orderOfPlay = nextOrder
-                nextOrder += 1
+            players[i].attendingSession = true
+            players[i].visits += 1
+            players[i].isChosen = false
+            players[i].warmingUp = true
+            players[i].lastVisit = Date()
+            players[i].playerCategories = PlayerCategory.waiting.rawValue
+            players[i].needsSync = true
+            players[i].orderOfPlay = nextOrder
+            nextOrder += 1
 
-                updateCoreData(for: players[i])
-            }
+            updateCoreData(for: players[i])
         }
 
-        applySearchFilter()
-        selectedPlayers.removeAll()
-
-        // Assign chooser
-        for i in players.indices {
-            players[i].isChoosing = false
-        }
-
-        if let chooserIndex = players.enumerated()
-            .filter ({ $0.element.attendingSession  })
+        // ✅ Assign one chooser
+        for i in players.indices { players[i].isChoosing = false }
+        if let chooserIndex = players
+            .enumerated()
+            .filter({ $0.element.attendingSession })
             .min(by: { $0.element.orderOfPlay < $1.element.orderOfPlay })?.offset {
             players[chooserIndex].isChoosing = true
-            updateCoreData(for: players[chooserIndex])
         }
+
+        // ✅ Save to Core Data
+        let context = PersistenceController.shared.container.viewContext
+        try await context.perform {
+            for player in self.players where player.needsSync == true {
+                let entity = PlayerStatusDTO.createOrUpdate(from: player, in: context)
+                entity.needsSync = true
+            }
+            try context.save()
+        }
+
+        // ✅ Push updated Waiting players to session
+        let newWaitingPlayers = players
+            .filter { $0.categoryEnum == .waiting }
+            .sorted(by: { $0.orderOfPlay < $1.orderOfPlay })
+
+        await sessionViewModel.mergeWaitingPlayers(newWaitingPlayers)
+
+        // ✅ UI cleanup
+        selectedPlayers.removeAll()
+        applySearchFilter()
 
         infoMessage = "✅ Checked in \(checkedCount) player(s)"
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -207,8 +271,11 @@ class PlayerListViewModel: ObservableObject {
 
         refreshSessionPublisher.send()
 
-        Task {
-            await PlayerApiService.shared.syncPendingPlayersToAzure()
+        // ⏳ Background sync to cloud
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            Task {
+                await PlayerApiService.shared.syncPendingPlayersToAzure()
+            }
         }
     }
 

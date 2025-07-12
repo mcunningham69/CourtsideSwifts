@@ -56,8 +56,17 @@ struct CourtSessionView: View {
         Button("Start") {
             guard court.players.isEmpty else { return } // ✅ Prevent overwriting
             if let team = nextTeam {
-                court.players = team
+                // ✅ Bump gamesCount in-place for UI purposes
+                let updatedTeam = team.map { dto -> PlayerStatusDTO in
+                    var copy = dto
+                    copy.gamesCount = max(dto.gamesCount + 1, 1)
+                    copy.playerCategories = PlayerCategory.playing.rawValue
+                    copy.isPlaying = true
+                    return copy
+                }
+                court.players = updatedTeam
             }
+
             Task {
                 await viewModel.startPlay(on: court, from: sessionViewModel)
             }
@@ -67,11 +76,12 @@ struct CourtSessionView: View {
     }
 
 
+
     private var stopButton: some View {
         Button("Stop") {
             Task {
                 stopSession()
-                await viewModel.stopPlay(on: court)
+                await viewModel.stopPlay(on: court, from: sessionViewModel)
             }
         }
         .buttonStyle(.borderedProminent)
@@ -217,19 +227,6 @@ struct NextTeamDetailsView: View {
                     
                 }
             }
-
-          /*  ForEach(team, id: \.id) { player in
-                HStack {
-                    Text(player.playerName ?? "Unnamed")
-                    Spacer()
-                    Text("\(player.gameCount) games")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding(6)
-                .background(Color.gray.opacity(0.15))
-                .cornerRadius(6)
-            }*/
 
             Text("Waiting to start...")
                 .font(.caption)

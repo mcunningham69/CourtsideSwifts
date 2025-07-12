@@ -90,8 +90,9 @@ class PlayerApiService: ObservableObject {
             }
 
             try context.save()
-        } catch {
-            print("❌ Sync failed: \(error.localizedDescription)")
+        } catch let error as NSError {
+            //print("❌ Sync failed for pending players to azure: \(error.localizedDescription)")
+            print("❌ Sync failed for pending players to azure: \(error), \(error.userInfo)")
         }
         
         await MainActor.run{
@@ -113,6 +114,9 @@ class PlayerApiService: ObservableObject {
     }
     
     func resetLocalData() async throws {
+        
+        let viewModel: PlayingSessionViewModel
+   
         let fetchRequest: NSFetchRequest<NSFetchRequestResult> = PlayerStatus.fetchRequest()
         let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
 

@@ -4,6 +4,12 @@ import CoreData
 
 @MainActor
 class PlayingSessionViewModel: ObservableObject {
+    @Published var swapCandidates: [PlayerStatusDTO] = []
+    
+    @Published var currentSecondTick = Date()
+
+    private var timer: Timer?
+
     @Published var courts: [CourtSession] = []
     var activeCourts: [CourtSession] {
         courts.filter { $0.isActive }
@@ -11,15 +17,28 @@ class PlayingSessionViewModel: ObservableObject {
 
    // @Published var groupedParticipants: [PlayersByCategory] = []
     var groupedParticipants: [ParticipantSection] = []
+    
+    @Published var isInSwapMode: Bool = false
+    
+    
+    
+    @Published var players: [PlayerStatusDTO] = [] {
+        didSet {
+            updateGroupedParticipants()
+        }
+    }
+
+
 
     @Published var playerToTimeout: PlayerStatusDTO? = nil
     @Published var nextPlayOrder: Int = 0
     @Published var useGradeFilter: Bool = true {
         didSet {
-            // Refresh UI if needed
-            objectWillChange.send()
+            // Re-evaluate isSelectable for all players
+            loadParticipantsFromCoreData()
         }
     }
+
 
     private let context = PersistenceController.shared.container.viewContext
     private var cancellables = Set<AnyCancellable> ()
@@ -40,7 +59,177 @@ class PlayingSessionViewModel: ObservableObject {
                 self.seedNextPlayOrder()
             }
             .store(in: &cancellables)
+        
+        //self.resetAllStartedAtToNil()
     }
+    
+    func startTimer() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            DispatchQueue.main.async {
+                self.currentSecondTick = Date() // triggers SwiftUI to update views
+            }
+        }
+    }
+
+    func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+    
+    
+    func toggleSwapCandidate(_ player: PlayerStatusDTO) {
+        if swapCandidates.contains(where: { $0.id == player.id }) {
+            swapCandidates.removeAll(where: { $0.id == player.id })
+        } else {
+            if swapCandidates.count < 2 {
+                swapCandidates.append(player)
+            } else {
+                swapCandidates = [player] // Reset with the new selection
+            }
+        }
+
+        print("🔁 Swap candidates: \(swapCandidates.map { $0.playerName ?? "?" })")
+    }
+    
+    func areSwapCandidatesValid() -> Bool {
+        guard swapCandidates.count == 2 else { return false }
+
+        guard let c1 = swapCandidates[0].categoryEnum,
+              let c2 = swapCandidates[1].categoryEnum else {
+            return false
+        }
+
+
+        let lowerGroup: Set<PlayerCategory> = [.pending, .waiting]
+        let upperGroup: Set<PlayerCategory> = [.chosen, .playing]
+
+        return (lowerGroup.contains(c1) && upperGroup.contains(c2)) ||
+               (upperGroup.contains(c1) && lowerGroup.contains(c2))
+    }
+
+    func performSwap() {
+        guard swapCandidates.count == 2 else { return }
+
+        let p1 = swapCandidates[0]
+        let p2 = swapCandidates[1]
+
+        // Safely unwrap categories
+        guard let c1 = p1.categoryEnum,
+              let c2 = p2.categoryEnum else {
+            print("❌ Missing category")
+            return
+        }
+
+        let lowerGroup: Set<PlayerCategory> = [.pending, .waiting]
+        let upperGroup: Set<PlayerCategory> = [.chosen, .playing]
+
+        let from: PlayerStatusDTO
+        let to: PlayerStatusDTO
+
+        if lowerGroup.contains(c1) && upperGroup.contains(c2) {
+            from = p1
+            to = p2
+        } else if upperGroup.contains(c1) && lowerGroup.contains(c2) {
+            from = p2
+            to = p1
+        } else {
+            print("❌ Invalid swap selection")
+            return
+        }
+
+        // Fetch both entities from Core Data using playerID (Int)
+        let fetchRequest: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "playerID == %d OR playerID == %d", from.playerID, to.playerID)
+
+        do {
+            let results = try context.fetch(fetchRequest)
+            
+            guard let fromEntity = results.first(where: { $0.playerID == from.playerID }),
+                  let toEntity   = results.first(where: { $0.playerID == to.playerID }) else {
+                print("❌ Could not locate both players in Core Data")
+                return
+            }
+
+            // Swap category
+            let tempCategory = fromEntity.playerCategories
+            fromEntity.playerCategories = toEntity.playerCategories
+            toEntity.playerCategories = tempCategory
+
+            // Swap flags
+            swap(&fromEntity.isWaiting, &toEntity.isWaiting)
+            swap(&fromEntity.isPlaying, &toEntity.isPlaying)
+            swap(&fromEntity.isChosen,  &toEntity.isChosen)
+
+            // Swap courtNo if either is playing
+            let tempCourtNo = fromEntity.courtNo
+            fromEntity.courtNo = toEntity.courtNo
+            toEntity.courtNo = tempCourtNo
+
+            fromEntity.needsSync = true
+            toEntity.needsSync = true
+
+            try? context.save()
+            print("✅ Players swapped and Core Data saved")
+
+            swapCandidates.removeAll()
+            loadParticipantsFromCoreData()
+        } catch {
+            print("❌ Swap failed: \(error)")
+        }
+    }
+    
+    @MainActor
+    func mergeWaitingPlayers(_ newPlayers: [PlayerStatusDTO]) async {
+        if let index = groupedParticipants.firstIndex(where: { $0.category == PlayerCategory.waiting.displayName  }) {
+            groupedParticipants[index].players = newPlayers
+        } else {
+            let newGroup = ParticipantSection(category: PlayerCategory.waiting.displayName , players: newPlayers)
+            groupedParticipants.append(newGroup)
+        }
+        objectWillChange.send()  // ✅ Triggers UI update without reloading everything
+    }
+
+
+
+    func updateGroupedParticipants() {
+        groupedParticipants = ParticipantSection.group(players)
+    }
+
+
+    func updateCourtSessions(forSwap p1: PlayerStatus, and p2: PlayerStatus) {
+        // ✅ 1. Swap courtNo between entities
+        let court1 = p1.courtNo
+        p1.courtNo = p2.courtNo
+        p2.courtNo = court1
+
+        // ✅ 2. Mark as needing sync
+        p1.needsSync = true
+        p2.needsSync = true
+
+        // ✅ 3. Update in-memory court lists if needed (for live UI)
+        let courtsToCheck = courts.filter { court in
+            court.players.contains(where: { player in
+                player.playerID == p1.playerID || player.playerID == p2.playerID
+            })
+        }
+
+        for court in courtsToCheck {
+            if let idx1 = court.players.firstIndex(where: { $0.playerID == p1.playerID }) {
+                court.players[idx1] = PlayerStatusDTO(from: p2)
+            }
+            if let idx2 = court.players.firstIndex(where: { $0.playerID == p2.playerID }) {
+                court.players[idx2] = PlayerStatusDTO(from: p1)
+            }
+        }
+
+        // ✅ 4. Trigger UI refresh
+        objectWillChange.send()
+    }
+
+
+
+
     
     
     /// Seed nextPlayOrder based on highest existing order
@@ -170,81 +359,105 @@ class PlayingSessionViewModel: ObservableObject {
 
     
 
-    /// Loads participants from Core Data into groupedParticipants
     func loadParticipantsFromCoreData() {
         let request: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
         request.predicate = NSPredicate(format: "attendingSession == true")
         NotificationCenter.default.post(name: .refreshSession, object: nil)
 
         do {
-            let players = try context.fetch(request).map { PlayerStatusDTO(from: $0) }
+            var players = try context.fetch(request).map { PlayerStatusDTO(from: $0) }
 
-            var groups: [ParticipantSection] = []
+            // 🔁 Determine chooser
+            let chooser = players.first(where: { $0.isChoosing && $0.categoryEnum == .waiting })
 
-            for category in PlayerCategory.allCases {
-                let filtered = players
-                    .filter { $0.categoryEnum == category }
-                    .sorted(by: {
-                        switch category {
-                        case .waiting, .pending:
-                            return $0.orderOfPlay < $1.orderOfPlay
-                        case .chosen, .playing:
-                            return $0.gameID < $1.gameID
-                        }
-                    })
-
-                if category == .chosen {
-                    groups.append(ParticipantSection(category: "Chosen", players: []))
-                    let groupedByGameID = Dictionary(grouping: filtered) { $0.gameID }
-                    for (gameID, playersInGame) in groupedByGameID.sorted(by: { $0.key < $1.key }) {
-                        groups.append(
-                            ParticipantSection(category: "Team \(gameID)", players: playersInGame)
-                        )
-                    }
-                } else {
-                    groups.append(
-                        ParticipantSection(category: category.displayName, players: filtered)
-                    )
-                }
+            // 🧠 Compute isSelectable and persist
+            players = players.map { player in
+                var updated = player
+                updated.isSelectable = isSelectableForChooserInternal(players: players, chooser: chooser, target: player)
+                persistSelectable(updated, isSelectable: updated.isSelectable)
+                return updated
             }
 
-            self.groupedParticipants = groups
-
-            // 🔁 Enforce chooser logic
-            let allPlayers = groups.flatMap { $0.players }
-            let waitingPlayers = allPlayers.filter { $0.categoryEnum == .waiting }
-            let nonWaitingPlayers = allPlayers.filter { $0.categoryEnum != .waiting }
-
-            var chooserAssigned = false
-
-            for player in nonWaitingPlayers {
-                if player.isChoosing {
-                    let entity = PlayerStatusDTO.createOrUpdate(from: player, in: context)
-                    entity.isChoosing = false
-                }
-            }
-
-            for player in waitingPlayers.sorted(by: { $0.orderOfPlay < $1.orderOfPlay }) {
-                let entity = PlayerStatusDTO.createOrUpdate(from: player, in: context)
-                if !chooserAssigned {
-                    entity.isChoosing = true
-                    chooserAssigned = true
-                    print("🟡 Assigned chooser: \(player.playerName ?? "")")
-                } else {
-                    entity.isChoosing = false
-                }
-            }
-
-            try context.save()
-
+            // ✅ Delegate grouping AND chooser assignment
+            self.groupedParticipants = ParticipantSection.group(players)
         } catch {
             print("❌ Failed to load participants: \(error.localizedDescription)")
+        }
+
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
         }
     }
 
 
-    
+    private func isSelectableForChooserInternal(players: [PlayerStatusDTO], chooser: PlayerStatusDTO?, target: PlayerStatusDTO) -> Bool {
+        guard useGradeFilter, let chooser = chooser else { return true }
+
+        let gradeOrder = ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2"]
+
+        let chooserGrade = chooser.grade?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+        let targetGrade  = target.grade?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+
+        guard let chooserIndex = gradeOrder.firstIndex(of: chooserGrade),
+              let targetIndex  = gradeOrder.firstIndex(of: targetGrade) else {
+            return false
+        }
+
+        // ✅ A1, A2, B1 can choose anyone
+        if chooserIndex <= 2 { return true }
+
+        // ✅ Count eligible players in grade range
+        let eligibleCount = players
+            .filter { $0.categoryEnum == .waiting }
+            .filter {
+                guard let g = $0.grade?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+                      let idx = gradeOrder.firstIndex(of: g) else { return false }
+                return idx <= chooserIndex + 2
+            }
+            .count
+
+        // ✅ Relax if fewer than 4 eligible players
+        if eligibleCount < 4 {
+            return true
+        }
+
+        // ✅ Unrestricted if chooser is A1, A2, B1 (indexes 0, 1, 2)
+        if chooserIndex <= 2 { return true }
+
+        // ✅ Allow same grade or lower
+        if targetIndex >= chooserIndex { return true }
+
+        // ✅ Allow up to 2 grades higher
+        if chooserIndex - targetIndex <= 2 { return true }
+
+        return false
+
+
+
+    }
+
+
+
+    private func persistSelectable(_ dto: PlayerStatusDTO, isSelectable: Bool) {
+        let entity = PlayerStatusDTO.createOrUpdate(from: dto, in: context)
+        entity.isSelectable = isSelectable
+        entity.needsSync = true
+        try? context.save()
+    }
+
     func toggleSelection(for player: PlayerStatusDTO) {
+        // ✅ Max 3 selected waiting players
+        if selectedWaitingPlayers.contains(player.id) {
+            selectedWaitingPlayers.remove(player.id)
+        } else {
+            if selectedWaitingPlayers.count < 3 {
+                selectedWaitingPlayers.insert(player.id)
+            } else {
+                print("❌ Only 3 players can be selected with the chooser.")
+            }
+        }
+    }
+   /* func toggleSelection(for player: PlayerStatusDTO) {
         let isEligible = isSelectableForChooser(player)
         print("🎯 Toggling \(player.playerName ?? "Unknown"), eligible: \(isEligible)")
 
@@ -253,15 +466,23 @@ class PlayingSessionViewModel: ObservableObject {
         if selectedWaitingPlayers.contains(player.id) {
             selectedWaitingPlayers.remove(player.id)
         } else {
+            // ✅ Only allow up to 4 selected players
+            if selectedWaitingPlayers.count >= 4 {
+                return // Do nothing
+            }
+            
             selectedWaitingPlayers.insert(player.id)
         }
-    }
-
-    func isSelectableForChooser(_ target: PlayerStatusDTO) -> Bool {
         
-        if !useGradeFilter, !useGradeFilter {
+        
+    }*/
+    
+    //DELETE ??
+    func isSelectableForChooser(_ target: PlayerStatusDTO) -> Bool {
+        guard useGradeFilter else {
             return true
         }
+
         guard let chooser = groupedParticipants
             .flatMap({ $0.players })
             .first(where: { $0.isChoosing }) else {
@@ -276,41 +497,46 @@ class PlayingSessionViewModel: ObservableObject {
         guard let chooserIndex = gradeOrder.firstIndex(of: chooserGrade),
               let targetIndex = gradeOrder.firstIndex(of: targetGrade) else {
             print("⚠️ Invalid grade(s): chooser=\(chooser.grade ?? "nil"), target=\(target.grade ?? "nil")")
+            persistSelectable(target, isSelectable: false)
             return false
         }
 
-        // ✅ A1, A2, B1 can choose anyone
-        if chooserIndex <= 2 { return true }
-        
-        // ✅ Check how many eligible players (by grade rule) are available
+        // ✅ A1, A2, B1 can select anyone
+        if chooserIndex <= 2 {
+            persistSelectable(target, isSelectable: true)
+            return true
+        }
+
+        // ✅ Eligible waiting players within grade range
         let eligiblePlayers = groupedParticipants
             .first(where: { $0.category == "Waiting" })?
             .players
-            .filter { waitingPlayer in
-                guard let waitingGradeIndex = gradeOrder.firstIndex(of: waitingPlayer.grade ?? "") else { return false }
-                return waitingGradeIndex >= chooserIndex - 2 && waitingGradeIndex <= chooserIndex
+            .filter { player in
+                guard let g = player.grade?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+                      let index = gradeOrder.firstIndex(of: g) else { return false }
+                return index >= chooserIndex - 2 && index <= chooserIndex
             } ?? []
 
-        let eligibleCount = eligiblePlayers.count
-
-        // ✅ Relax rule if fewer than 4 eligible players to select from
-        if eligibleCount < 4 {
-            print("⚠️ Relaxing grade rule: only \(eligibleCount) eligible players for chooser \(chooser.playerName ?? "")")
+        // ✅ Relax if not enough eligible players to form a team
+        if eligiblePlayers.count < 4 {
+            print("⚠️ Relaxing grade rule: only \(eligiblePlayers.count) eligible players for chooser \(chooser.playerName ?? "")")
+            persistSelectable(target, isSelectable: true)
             return true
         }
-        
 
-        if chooserIndex >= 3 {
-            // B2 or lower — restrict to at most 2 levels above
-            return targetIndex >= chooserIndex - 2 && targetIndex <= chooserIndex
+        let allowed: Bool
+
+        if chooserIndex <= 2 {
+            allowed = true
+        } else if targetIndex >= chooserIndex {
+            allowed = true
         } else {
-            // B1 or higher can pick anyone
-            return true
+            allowed = chooserIndex - targetIndex <= 2
         }
 
-
+        persistSelectable(target, isSelectable: allowed)
+        return allowed
     }
-    
 
     func canStartCourt(_ court: CourtSession, activeCourts: [CourtSession]) -> Bool {
         let alreadyAssignedIDs = activeCourts.flatMap { $0.players.map(\.id) }
@@ -323,6 +549,12 @@ class PlayingSessionViewModel: ObservableObject {
             }
 
         return !availableChosenTeams.isEmpty
+    }
+
+    private func isGradeSelectable(chooserIndex: Int, targetIndex: Int) -> Bool {
+        if chooserIndex <= 2 { return true }
+        if targetIndex >= chooserIndex { return true }
+        return chooserIndex - targetIndex <= 2
     }
 
 
@@ -348,7 +580,25 @@ class PlayingSessionViewModel: ObservableObject {
     }
 
 
-    
+    func resetAllStartedAtToNil() {
+        
+
+        
+        let context = PersistenceController.shared.container.viewContext
+        let request: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+
+        do {
+            let players = try context.fetch(request)
+            for player in players {
+                player.startedAt = nil
+            }
+            try context.save()
+            print("✅ All startedAt fields set to nil.")
+        } catch {
+            print("❌ Failed to reset startedAt fields: \(error)")
+        }
+    }
+
  
     
     func timeoutPlayer(_ player: PlayerStatusDTO) {
@@ -397,7 +647,7 @@ class PlayingSessionViewModel: ObservableObject {
             }
 
             try context.save()
-            print("✅ New chooser assigned (if any)")
+         //   print("✅ New chooser assigned (if any)")
 
             // 8. Refresh UI
             loadParticipantsFromCoreData()
@@ -437,6 +687,14 @@ class PlayingSessionViewModel: ObservableObject {
                 entity.playerCategories = Int32(PlayerCategory.playing.rawValue)
                 entity.isChosen = false
                 entity.isChoosing = false
+                
+                // Increment game count safely
+                if entity.gamesCount == 0 {
+                    entity.gamesCount = 1
+                } else {
+                    entity.gamesCount += 1
+                }
+
             }
         }
 
@@ -459,7 +717,7 @@ class PlayingSessionViewModel: ObservableObject {
             print("✅ Sync completed")
             loadParticipantsFromCoreData()
         } catch {
-            print("❌ Sync failed: \(error.localizedDescription)")
+            print("❌ Sync failedn with cloud: \(error.localizedDescription)")
         }
         showSyncBanner = false
     }

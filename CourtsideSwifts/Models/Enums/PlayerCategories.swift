@@ -5,7 +5,7 @@
 //  Created by Mike Cunningham on 5/7/2025.
 //
 
-enum PlayerCategory: Int, Codable {
+public enum PlayerCategory: Int, Codable {
     case pending = 0
     case waiting = 1
     case chosen = 2
@@ -21,6 +21,10 @@ extension PlayerCategory: CaseIterable {
         case .chosen:  return "Chosen"
         case .playing: return "Playing"
         }
+    }
+    
+    static func fromDisplayName(_ name: String) -> PlayerCategory? {
+        return PlayerCategory.allCases.first { $0.displayName == name }
     }
 }
 

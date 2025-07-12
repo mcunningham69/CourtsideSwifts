@@ -10,19 +10,26 @@ import SwiftUI
 struct TimerLabelView: View {
     let baseSeconds: Int
     let startedAt: String?
+    let finishedAt: String?
     let tick: Date  // from viewModel, triggers every second
     
     @State private var displayedSeconds: Int = 0
-    private let formatter = DateFormatter.hhmmss
+    //private let formatter = DateFormatter.hhmmss
+    private let formatter = ISO8601DateFormatter()
+
     
     var body: some View {
-        Text(displayedSeconds.asHoursMinutesSeconds())
+        Text("\(computedSeconds.asHoursMinutesSeconds())")
+        //Text(displayedSeconds.asHoursMinutesSeconds())
             .font(.caption)
             .monospacedDigit()
             .transition(.opacity.combined(with: .scale))
             .animation(.easeInOut(duration: 0.2), value: displayedSeconds)
             .onAppear {
-                print("⏱ TimerLabelView appeared for player with startedAt = \(startedAt ?? "nil")")
+               // print("⏱ TimerLabelView appeared for player with startedAt = \(startedAt ?? "nil")")
+                print("🪵 Input startedAt: \(startedAt ?? "nil")")
+                print("🪵 Parsed ISO: \(String(describing: ISO8601DateFormatter().date(from: startedAt ?? "")))")
+
                 displayedSeconds = computeCurrentSeconds()
             }
 
@@ -32,19 +39,61 @@ struct TimerLabelView: View {
             }
     }
     
-    private func computeCurrentSeconds() -> Int {
-        var total = baseSeconds
-        
-        if let start = startedAt.flatMap({ formatter.date(from: $0) }) {
-            let elapsed = Int(Date().timeIntervalSince(start))
-            print("🧮 Elapsed: \(elapsed) sec from \(start)")
+    private var computedSeconds: Int {
+            var total = baseSeconds
 
-            total += max(0, elapsed)
-        } else{
-            print("🚫 Invalid or missing startedAt: \(startedAt ?? "nil")")
+            guard let startStr = startedAt,
+                  let start = formatter.date(from: startStr) else {
+                print("🚫 Invalid or missing startedAt: \(startedAt ?? "nil")")
+                return total
+            }
+
+            // If stopped, don't keep incrementing
+            if let endStr = finishedAt,
+               let end = formatter.date(from: endStr),
+               end > start {
+                return total
+            }
+
+            let elapsed = Int(Date().timeIntervalSince(start))
+            print("🧮 Elapsed since start: \(elapsed) sec from \(start)")
+            return total + max(0, elapsed)
         }
-        
-        return total
+    
+    
+    private func computeCurrentSeconds() -> Int {
+        let total = baseSeconds
+       // let isoFormatter = ISO8601DateFormatter()
+
+        print("🪵 Input startedAt: \(startedAt ?? "nil")")
+
+        guard let startStr = startedAt,
+              let start = formatter.date(from: startStr) else {
+            print("🚫 Invalid or missing startedAt: \(startedAt ?? "nil")")
+            return total
+        }
+
+        if let endStr = finishedAt,
+           let end = formatter.date(from: endStr),
+           end > start {
+            print("⏱ Session finished. Ignoring extra time.")
+            return total // base already includes duration
+        }
+
+        let elapsed = Int(Date().timeIntervalSince(start))
+        print("🧮 Elapsed since start: \(elapsed) sec from \(start)")
+        return total + max(0, elapsed)
     }
+
+
 }
+
+extension ISO8601DateFormatter {
+    static let shared: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+}
+
 

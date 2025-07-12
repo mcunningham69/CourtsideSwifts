@@ -85,13 +85,17 @@ struct PlayerListView: View {
                 // Check-in / Check-out / Sync buttons
                 HStack {
                     Button("Check In") {
-                        viewModel.checkInSelected()
                         Task {
-                            try? await Task.sleep(nanoseconds: 300_000_000)
-                            sessionViewModel.loadParticipantsFromCoreData()
+                            do {
+                                try await viewModel.checkInSelected(sessionViewModel: sessionViewModel)
+                            } catch {
+                                print("❌ Check-in failed: \(error)")
+                            }
+                            
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+
+                        .buttonStyle(.borderedProminent)
 
                     Button("Done") {
                         viewModel.checkOutSelected()

@@ -57,3 +57,53 @@ struct PersistenceController {
 
     }
 }
+
+extension PersistenceController {
+    func migrateLegacyTimeFormatsToISO8601() {
+        let context = self.container.viewContext
+        let request: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+        request.predicate = NSPredicate(format: "startedAt != nil OR finishedAt != nil")
+
+        let legacyFormatter = DateFormatter()
+        legacyFormatter.dateFormat = "HH:mm:ss"
+        legacyFormatter.locale = Locale(identifier: "en_US_POSIX")
+        legacyFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+
+        let isoFormatter = ISO8601DateFormatter()
+
+        do {
+            let results = try context.fetch(request)
+            var updatedCount = 0
+
+            for entity in results {
+                var didChange = false
+
+                if let legacyStart = entity.startedAt,
+                   legacyStart.count == 8,
+                   let parsedDate = legacyFormatter.date(from: legacyStart) {
+                    entity.startedAt = isoFormatter.string(from: parsedDate)
+                    didChange = true
+                }
+
+                if let legacyFinish = entity.finishedAt,
+                   legacyFinish.count == 8,
+                   let parsedDate = legacyFormatter.date(from: legacyFinish) {
+                    entity.finishedAt = isoFormatter.string(from: parsedDate)
+                    didChange = true
+                }
+
+                if didChange {
+                    updatedCount += 1
+                }
+            }
+
+            if updatedCount > 0 {
+                try context.save()
+                print("✅ Migration complete: \(updatedCount) records updated to ISO8601")
+            }
+        } catch {
+            print("❌ Migration failed: \(error.localizedDescription)")
+        }
+    }
+}
+

@@ -42,83 +42,7 @@ struct PlayingSessionView: View {
                 .toggleStyle(.switch)
                 .padding(.horizontal)
 
-            // 🔽 Main Grouped List
-            /*List {
-                ForEach(viewModel.groupedParticipants) { group in
-                    if ["Pending", "Waiting", "Chosen", "Playing"].contains(group.category) {
-                        Section(header: Text(group.category).font(.headline)) {
-                            ForEach(group.players) { player in
-                                let showTimeout = ["Waiting", "Playing", "Chosen"].contains(group.category)
-                                let isEligible = viewModel.isSelectableForChooser(player)
-                                let isSelected = viewModel.selectedWaitingPlayers.contains(player.id)
-
-                                let baseRow: some View = Group {
-                                    if group.category == "Waiting" && !player.isChoosing {
-                                        PlayerRowView(player: player)
-                                            .contentShape(Rectangle())
-                                            .onTapGesture {
-                                                if isEligible {
-                                                    viewModel.toggleSelection(for: player)
-                                                }
-                                            }
-                                            .background(isSelected ? Color.blue.opacity(0.2) : Color.clear)
-                                            .opacity(isEligible ? 1.0 : 0.3)
-                                            .help(isEligible ? "" : "Not eligible for selection")
-                                    } else {
-                                        PlayerRowView(player: player)
-                                    }
-                                }
-
-                                if showTimeout {
-                                    #if os(macOS)
-                                    HStack {
-                                        baseRow
-                                        Spacer(minLength: 8)
-                                        Button {
-                                            viewModel.playerToTimeout = player
-                                            showTimeoutConfirmation = true
-                                        } label: {
-                                            Image(systemName: "clock.fill").foregroundColor(.red)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .padding(.trailing, 8)
-                                    }
-                                    #else
-                                    baseRow
-                                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                            Button(role: .destructive) {
-                                                viewModel.playerToTimeout = player
-                                                showTimeoutConfirmation = true
-                                            } label: {
-                                                Label("Time Out", systemImage: "clock.fill")
-                                            }
-                                        }
-                                    #endif
-                                } else {
-                                    baseRow
-                                }
-                            }
-                        }
-                    } else {
-                        // Team headers: colored capsule styling
-                        Section(header:
-                            HStack {
-                                Text(group.category)
-                                    .font(.caption)
-                                    .padding(6)
-                                    .background(group.players.first?.gameColor.opacity(0.2))
-                                    .foregroundColor(group.players.first?.gameColor ?? .primary)
-                                    .cornerRadius(8)
-                                Spacer()
-                            }
-                        ) {
-                            ForEach(group.players) { player in
-                                PlayerRowView(player: player)
-                            }
-                        }
-                    }
-                }
-            }*/
+           
             
             List {
                 ForEach(viewModel.groupedParticipants) { group in
@@ -135,12 +59,16 @@ struct PlayingSessionView: View {
                     viewModel.confirmChooserSelection()
                 }
                 .buttonStyle(.borderedProminent)
+               
+                
             } else {
                 Button("Random Selection") {
                     viewModel.randomlySelectTeam()
                 }
                 .buttonStyle(.bordered)
+                .padding(.bottom, 40)
             }
+                
             
             // ✅ Add this below `body`
              var hasEnoughEligible: Bool {
@@ -155,39 +83,9 @@ struct PlayingSessionView: View {
 
                 return eligible.count >= 3
             }
-
-            
-       /*     if viewModel.selectedWaitingPlayers.count != 3 {
-                Button("Randomly Select Team") {
-                    viewModel.randomlySelectTeam()
-                }
-                .buttonStyle(.bordered)
-                .padding(.bottom, 4)
-            }
-
-
-
-            if viewModel.selectedWaitingPlayers.count == 3 {
-                Button("Confirm Selection") {
-                    viewModel.confirmChooserSelection()
-                    
-                }
-                .buttonStyle(.borderedProminent)
-                .padding()
-            }*/
         }
         .navigationTitle("Playing Session")
-        // Add the Courts button here in the nav bar
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: {
-                    // append to the NavigationStack path from MainSplitView
-                    NotificationCenter.default.post(name: .refreshSession, object: ())
-                }) {
-                    Label("Courts", systemImage: "sportscourt")
-                }
-            }
-        }
+
         .alert("Time Out Player?", isPresented: $showTimeoutConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Confirm", role: .destructive) {
@@ -198,10 +96,10 @@ struct PlayingSessionView: View {
         } message: {
             Text("This will move the player back to Pending.")
         }
-        .onAppear {
+      /*  .onAppear {
             // only reload when this view appears
             viewModel.loadParticipantsFromCoreData()
-        }
+        }*/
     }
 }
 

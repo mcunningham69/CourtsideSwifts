@@ -152,6 +152,41 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
             }
         }
     }
+    
+    var totalActiveSeconds: Int {
+        let base = Int(durationInSeconds)
+        let isoFormatter = ISO8601DateFormatter()
+        //let legacyFormatter = DateFormatter.hhmmss
+
+        // Try ISO 8601
+        if let start = startedAt.flatMap({ isoFormatter.date(from: $0) }),
+           let end = finishedAt.flatMap({ isoFormatter.date(from: $0) }),
+           end > start {
+            return base
+        }
+
+      /*  // Try legacy hh:mm:ss format
+        if let start = startedAt.flatMap({ legacyFormatter.date(from: $0) }),
+           let end = finishedAt.flatMap({ legacyFormatter.date(from: $0) }),
+           end > start {
+            return base
+        }*/
+
+        // Still playing - use current time
+        if let start = startedAt.flatMap({ isoFormatter.date(from: $0) }) {
+            let extra = Int(Date().timeIntervalSince(start))
+            return base + max(0, extra)
+        }
+
+      /*  if let start = startedAt.flatMap({ legacyFormatter.date(from: $0) }) {
+            let extra = Int(Date().timeIntervalSince(start))
+            return base + max(0, extra)
+        }*/
+
+        return base
+    }
+
+
 
 
     
@@ -341,5 +376,18 @@ extension PlayerStatusDTO {
         return colors[index]
     }
 }
+
+import Foundation
+
+extension DateFormatter {
+    static let hhmmss: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        return formatter
+    }()
+}
+
 
 

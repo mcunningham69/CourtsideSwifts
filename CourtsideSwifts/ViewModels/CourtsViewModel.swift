@@ -38,46 +38,92 @@ class CourtsViewModel: ObservableObject {
         guard court.players.count == 4 else { return }
         let context = PersistenceController.shared.container.viewContext
 
-        await context.perform {
-            for var playerDTO in court.players {
-                let fetch: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
-                fetch.predicate = NSPredicate(format: "playerID == %d", playerDTO.playerID)
+        context.performAndWait {
+            do{
+                for var playerDTO in court.players {
+                    let fetch: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+                    fetch.predicate = NSPredicate(format: "playerID == %d", playerDTO.playerID)
+                    
+                    if let entity = try? context.fetch(fetch).first {
+                        entity.playerCategories = Int32(PlayerCategory.playing.rawValue)
+                        entity.isChosen = false
+                        entity.isPlaying = true
+                        entity.isWaiting = false
+                        entity.gamesCount += 1
+                        
+                        playerDTO.gamesCount = entity.gamesCount
+                        playerDTO.courtNo = Int32(court.courtNumber)
+                        playerDTO.playerCategories = Int(PlayerCategory.playing.rawValue)
+                        
+                        entity.courtNo = Int32(court.courtNumber)
+                        
+                        let now = Date()
+                        let isoFormatter = ISO8601DateFormatter()
+                        entity.startedAt = isoFormatter.string(from: now)
+                        playerDTO.startedAt = isoFormatter.string(from: now)
+                        
+                        
+                        //   let formatter = DateFormatter.hhmmss
+                        // entity.startedAt = formatter.string(from: Date())
+                        entity.finishedAt = nil
+                        
+                        entity.needsSync = true
+                    }
+                }
+                
+                
+                
+                try context.save()}
+            catch{
+                print("❌ Core Data error: \(error)")
+            }
+  
+       // }
+        
+        court.players = court.players.map { player in
+            var updated = player
+            if let entity = try? context.fetch(PlayerStatus.fetchRequest())
+                .first(where: { $0.playerID == player.playerID }) {
+                updated.gamesCount = entity.gamesCount
+                updated.courtNo = entity.courtNo
+                updated.playerCategories = Int(entity.playerCategories)
+                updated.startedAt = entity.startedAt
+            }
+            return updated
+        }
 
-                if let entity = try? context.fetch(fetch).first {
-                    entity.playerCategories = Int32(PlayerCategory.playing.rawValue)
-                    entity.isChosen = false
-                    entity.isPlaying = true
-                    entity.isWaiting = false
-                    entity.gamesCount += 1
-                    
-                    playerDTO.gamesCount = entity.gamesCount
-                    
-                    entity.courtNo = Int32(court.courtNumber)
-                    entity.startedAt = ISO8601DateFormatter().string(from: Date())
-                    entity.needsSync = true
+        //await context.perform {
+            let fetch: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+            fetch.predicate = NSPredicate(format: "courtNo == %d AND isPlaying == true", court.courtNumber)
+
+            if let entities = try? context.fetch(fetch) {
+                let updatedDTOs = entities.map { PlayerStatusDTO(from: $0) }
+                if let idx = self.courts.firstIndex(where: { $0.id == court.id }) {
+                    self.courts[idx].players = updatedDTOs
+                    self.courts[idx].isActive = true
+                    self.courts[idx].startTime = Date()
                 }
             }
 
-            try? context.save()
         }
-
-        // 🔁 Update local court model
-        if let idx = courts.firstIndex(where: { $0.id == court.id }) {
-            courts[idx].isActive = true
-            courts[idx].startTime = Date()
-        }
-
+        
+        sessionViewModel.startTimer();
         // 🔁 Update session view model to reflect move from Chosen to Playing
         sessionViewModel.loadParticipantsFromCoreData()
 
-        // 🔔 Notify UI
-        refreshTrigger.send()
+
+        // ✅ Also notify the UI inside the same scope
+        DispatchQueue.main.async {
+            sessionViewModel.objectWillChange.send()
+            self.refreshTrigger.send()
+        }
+
     }
 
 
 
     /// Stops play on the given court and moves players back to waiting
-    func stopPlay(on court: CourtSession) async {
+    func stopPlay(on court: CourtSession,from sessionViewModel: PlayingSessionViewModel) async {
         let context = PersistenceController.shared.container.viewContext
         let fetchAll: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
         fetchAll.predicate = NSPredicate(format: "attendingSession == true")
@@ -93,9 +139,22 @@ class CourtsViewModel: ObservableObject {
                     entity.isPlaying = false
                     entity.isChosen = false
                     entity.warmingUp = false
-                    let fmt = DateFormatter()
-                    fmt.dateFormat = "HH:mm:ss"
-                    entity.finishedAt = fmt.string(from: Date())
+                    entity.courtNo = 0
+                    
+                    let now = Date()
+                    let isoFormatter = ISO8601DateFormatter()
+                    entity.finishedAt = isoFormatter.string(from: now)
+
+
+                    // Add current duration to durationInSeconds
+                    if let startedAtStr = entity.startedAt,
+                       let startDate = isoFormatter.date(from: startedAtStr) {
+                        let sessionDuration = Int32(now.timeIntervalSince(startDate))
+                        entity.durationInSeconds += max(sessionDuration, 0)
+                    }
+
+                    entity.startedAt = nil
+                                  
                     entity.orderOfPlay = nextOrder
                     entity.needsSync = true
                     nextOrder += 1
@@ -113,6 +172,9 @@ class CourtsViewModel: ObservableObject {
             courts[idx].startTime = nil
             courts[idx].players.removeAll()
         }
+        
+        sessionViewModel.stopTimer()
+        
 
         // Notify listeners
         refreshTrigger.send()
