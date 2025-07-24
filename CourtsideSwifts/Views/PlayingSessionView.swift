@@ -53,14 +53,18 @@ struct PlayingSessionView: View {
                     )
                 }
             }
-            
-            if viewModel.selectedWaitingPlayers.count == 3 {
+  
+            let selectedWaitingCount = viewModel.groupedParticipants
+                .first(where: { $0.category == "Waiting" })?
+                .players
+                .filter { viewModel.selectedWaitingPlayers.contains($0.id) }
+                .count ?? 0
+
+            if selectedWaitingCount == 3 {
                 Button("Confirm Selection") {
                     viewModel.confirmChooserSelection()
                 }
                 .buttonStyle(.borderedProminent)
-               
-                
             } else {
                 Button("Random Selection") {
                     viewModel.randomlySelectTeam()
@@ -68,7 +72,7 @@ struct PlayingSessionView: View {
                 .buttonStyle(.bordered)
                 .padding(.bottom, 40)
             }
-                
+
             
             // ✅ Add this below `body`
              var hasEnoughEligible: Bool {
@@ -77,10 +81,14 @@ struct PlayingSessionView: View {
                     return false
                 }
 
-                let eligible = waitingGroup.players.filter {
-                    $0.id != chooser.id && viewModel.isSelectableForChooser($0)
-                }
-
+                 let eligible = waitingGroup.players.filter {
+                     $0.id != chooser.id &&
+                     viewModel.isSelectableForChooserInternal(
+                         players: waitingGroup.players,
+                         chooser: chooser,
+                         target: $0
+                     )
+                 }
                 return eligible.count >= 3
             }
         }

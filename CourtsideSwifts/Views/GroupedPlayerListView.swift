@@ -16,7 +16,7 @@ struct GroupedPlayerListView: View {
             let color = group.players.first?.gameColor ?? .primary
             let courtNo = group.players.first?.courtNo
             let category = group.category
-
+            
             Section(
                 header:
                     VStack(alignment: .leading, spacing: 4) {
@@ -29,13 +29,13 @@ struct GroupedPlayerListView: View {
                                 .cornerRadius(8)
                             Spacer()
                         }
-
+                        
                         if let courtNo = courtNo, category.starts(with: "Court") {
                             HStack(spacing: 6) {
                                 Label("Court \(courtNo)", systemImage: "sportscourt")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
-
+                                
                                 statusBadge(for: category) // ✅ call your helper here
                             }
                             .padding(.leading, 6)
@@ -45,24 +45,24 @@ struct GroupedPlayerListView: View {
                         }
                     }
             ) {
-               /* if viewModel.isInSwapMode {
-                    Text("Swap Mode Active")
-                        .font(.caption)
-                        .padding(6)
-                        .foregroundColor(.white)
-                        .background(Color.blue)
-                        .cornerRadius(8)
-                        .padding(.horizontal)
-                } else {
-                    Text("Selection Mode")
-                        .font(.caption)
-                        .padding(6)
-                        .foregroundColor(.white)
-                        .background(Color.green)
-                        .cornerRadius(8)
-                        .padding(.horizontal)
-                }*/
-
+                /* if viewModel.isInSwapMode {
+                 Text("Swap Mode Active")
+                 .font(.caption)
+                 .padding(6)
+                 .foregroundColor(.white)
+                 .background(Color.blue)
+                 .cornerRadius(8)
+                 .padding(.horizontal)
+                 } else {
+                 Text("Selection Mode")
+                 .font(.caption)
+                 .padding(6)
+                 .foregroundColor(.white)
+                 .background(Color.green)
+                 .cornerRadius(8)
+                 .padding(.horizontal)
+                 }*/
+                
                 ForEach(group.players) { player in
                     PlayerRowView(
                         player: player,
@@ -78,17 +78,29 @@ struct GroupedPlayerListView: View {
                 }
             }
         }
-
-
-
+        
+        
+        
     }
     
     @ViewBuilder
     private func playerRow(for player: PlayerStatusDTO) -> some View {
         let showTimeout = ["Waiting", "Playing", "Chosen"].contains(group.category)
-        let isEligible = viewModel.isSelectableForChooser(player)
         
-        // ✅ This ensures selectedWaitingPlayers highlights in non-swap mode
+        // 🔍 Fresh chooser + eligibility logic
+        let chooser = group.category == "Waiting"
+            ? group.players.first(where: { $0.isChoosing })
+            : nil
+
+        let isEligible = group.category == "Waiting"
+            ? viewModel.isSelectableForChooserInternal(
+                players: group.players,
+                chooser: chooser,
+                target: player
+            )
+            : true
+
+        
         let isSelected: Bool = viewModel.isInSwapMode
         ? viewModel.swapCandidates.contains(where: { $0.id == player.id })
         : viewModel.selectedWaitingPlayers.contains(player.id)

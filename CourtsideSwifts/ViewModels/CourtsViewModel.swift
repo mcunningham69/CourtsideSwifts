@@ -37,87 +37,55 @@ class CourtsViewModel: ObservableObject {
     func startPlay(on court: CourtSession, from sessionViewModel: PlayingSessionViewModel) async {
         guard court.players.count == 4 else { return }
         let context = PersistenceController.shared.container.viewContext
+        let currentGameID = sessionViewModel.latestGameID
 
         context.performAndWait {
-            do{
-                for var playerDTO in court.players {
-                    let fetch: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
-                    fetch.predicate = NSPredicate(format: "playerID == %d", playerDTO.playerID)
-                    
-                    if let entity = try? context.fetch(fetch).first {
-                        entity.playerCategories = Int32(PlayerCategory.playing.rawValue)
-                        entity.isChosen = false
-                        entity.isPlaying = true
-                        entity.isWaiting = false
-                        entity.gamesCount += 1
-                        
-                        playerDTO.gamesCount = entity.gamesCount
-                        playerDTO.courtNo = Int32(court.courtNumber)
-                        playerDTO.playerCategories = Int(PlayerCategory.playing.rawValue)
-                        
-                        entity.courtNo = Int32(court.courtNumber)
-                        
-                        let now = Date()
-                        let isoFormatter = ISO8601DateFormatter()
-                        entity.startedAt = isoFormatter.string(from: now)
-                        playerDTO.startedAt = isoFormatter.string(from: now)
-                        
-                        
-                        //   let formatter = DateFormatter.hhmmss
-                        // entity.startedAt = formatter.string(from: Date())
-                        entity.finishedAt = nil
-                        
-                        entity.needsSync = true
-                    }
+            do {
+                let fetch: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+                fetch.predicate = NSPredicate(format: "gameID == %d AND isChosen == true", currentGameID)
+
+                let chosenPlayers = try context.fetch(fetch)
+                let now = Date()
+                let isoFormatter = ISO8601DateFormatter()
+
+                for entity in chosenPlayers {
+                    entity.playerCategories = Int32(PlayerCategory.playing.rawValue)
+                    entity.isChosen = false
+                    entity.isPlaying = true
+                    entity.isWaiting = false
+                    entity.gamesCount += 1
+                    entity.courtNo = Int32(court.courtNumber)
+                    entity.startedAt = isoFormatter.string(from: now)
+                    entity.finishedAt = nil
+                    entity.needsSync = true
                 }
                 
+                try context.save()
                 
-                
-                try context.save()}
-            catch{
+                // ✅ Debounced sync to Azure
+                SyncCoordinator.shared.requestSync()
+
+                // Refresh DTOs from Core Data to sync with UI
+                court.players = chosenPlayers.map { PlayerStatusDTO(from: $0) }
+            } catch {
                 print("❌ Core Data error: \(error)")
             }
-  
-       // }
-        
-        court.players = court.players.map { player in
-            var updated = player
-            if let entity = try? context.fetch(PlayerStatus.fetchRequest())
-                .first(where: { $0.playerID == player.playerID }) {
-                updated.gamesCount = entity.gamesCount
-                updated.courtNo = entity.courtNo
-                updated.playerCategories = Int(entity.playerCategories)
-                updated.startedAt = entity.startedAt
-            }
-            return updated
         }
 
-        //await context.perform {
-            let fetch: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
-            fetch.predicate = NSPredicate(format: "courtNo == %d AND isPlaying == true", court.courtNumber)
-
-            if let entities = try? context.fetch(fetch) {
-                let updatedDTOs = entities.map { PlayerStatusDTO(from: $0) }
-                if let idx = self.courts.firstIndex(where: { $0.id == court.id }) {
-                    self.courts[idx].players = updatedDTOs
-                    self.courts[idx].isActive = true
-                    self.courts[idx].startTime = Date()
-                }
-            }
-
+        // ✅ Update in-memory CourtSession
+        if let idx = courts.firstIndex(where: { $0.id == court.id }) {
+            courts[idx].players = court.players
+            courts[idx].isActive = true
+            courts[idx].startTime = Date()
         }
-        
-        sessionViewModel.startTimer();
-        // 🔁 Update session view model to reflect move from Chosen to Playing
+
+        sessionViewModel.startTimer()
         sessionViewModel.loadParticipantsFromCoreData()
 
-
-        // ✅ Also notify the UI inside the same scope
         DispatchQueue.main.async {
             sessionViewModel.objectWillChange.send()
             self.refreshTrigger.send()
         }
-
     }
 
 
@@ -129,16 +97,19 @@ class CourtsViewModel: ObservableObject {
         fetchAll.predicate = NSPredicate(format: "attendingSession == true")
 
         do {
-            var allEntities = try context.fetch(fetchAll)
+            let allEntities = try context.fetch(fetchAll)
             let maxOrder = allEntities.map { $0.orderOfPlay }.max() ?? 0
             var nextOrder = maxOrder + 1
 
             for dto in court.players {
-                if let entity = allEntities.first(where: { $0.playerID == dto.playerID }) {
+                if let entity = allEntities.first(where: { $0.uuid == dto.uuid }) {
                     entity.playerCategories = Int32(PlayerCategory.waiting.rawValue)
                     entity.isPlaying = false
                     entity.isChosen = false
+                    entity.isChoosing = false
                     entity.warmingUp = false
+                    entity.isWaiting = true
+                    entity.gameID = 0
                     entity.courtNo = 0
                     
                     let now = Date()
@@ -162,6 +133,10 @@ class CourtsViewModel: ObservableObject {
             }
 
             try context.save()
+            
+            // ✅ Debounced sync to Azure
+            SyncCoordinator.shared.requestSync()
+            
         } catch {
             print("❌ Stop play failed: \(error)")
         }
@@ -175,9 +150,15 @@ class CourtsViewModel: ObservableObject {
         
         sessionViewModel.stopTimer()
         
-
+        // ✅ Reload session to refresh groupedParticipants and selection states
+        await MainActor.run {
+            sessionViewModel.selectedWaitingPlayers.removeAll()
+            sessionViewModel.loadParticipantsFromCoreData()
+        }
+        
         // Notify listeners
         refreshTrigger.send()
+        
     }
     
  

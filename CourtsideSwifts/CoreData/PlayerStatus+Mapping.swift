@@ -7,43 +7,56 @@
 import Foundation
 import CoreData
 
+import CoreData
+
 extension PlayerStatus {
     static func createOrUpdate(from dto: PlayerStatusDTO, in context: NSManagedObjectContext) -> PlayerStatus {
         let request: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
-        request.predicate = NSPredicate(format: "playerID == %d", dto.playerID)
+        request.predicate = NSPredicate(format: "uuid == %@", dto.uuid as CVarArg)
 
-        let player = (try? context.fetch(request).first) ?? PlayerStatus(context: context)
+        let entity: PlayerStatus
 
-        player.playerID = Int32(dto.playerID)
-        player.playerName = dto.playerName
-        player.firstName = dto.firstName
-        player.surname = dto.surname
-        player.email = dto.email
-        player.visits = Int32(dto.visits)
-        player.isPlaying = dto.isPlaying
-        player.isWaiting = dto.isWaiting
-        player.isSelectable = dto.isSelectable
-        player.isFacilitator = dto.isFacilitator
-        player.isChoosing = dto.isChoosing
-        player.isTimeOut = dto.isTimeOut
-        player.warmingUp = dto.warmingUp
-        player.grade = dto.grade
-        player.gamesCount = Int32(dto.gamesCount)
-        player.isChosen = dto.isChosen
-        player.isAdmin = dto.isAdmin
-        player.courtNo = Int32(dto.courtNo)
-        player.attendingSession = dto.attendingSession
-        player.firstVisit = dto.firstVisit
-        player.lastVisit = dto.lastVisit
-        player.startedAt = dto.startedAt
-        player.finishedAt = dto.finishedAt
-        player.orderOfPlay = Int32(dto.orderOfPlay)
-        player.squareID = dto.squareID
-        player.gameID = Int32(dto.gameID)
-        player.playerCategories = Int32(dto.playerCategories)
-        player.durationInSeconds = Int32(dto.durationInSeconds)
+        if let existing = try? context.fetch(request).first {
+            entity = existing
+        } else {
+            entity = PlayerStatus(context: context)
+            entity.uuid = dto.uuid              // Always set at creation
+        }
 
-        return player
+        // MARK: - Optional fields
+        entity.playerName = dto.playerName
+        entity.firstName = dto.firstName
+        entity.surname = dto.surname
+        entity.email = dto.email
+        entity.grade = dto.grade
+        entity.startedAt = dto.startedAt
+        entity.finishedAt = dto.finishedAt
+        entity.squareID = dto.squareID
+
+        // MARK: - Required state flags
+        entity.isPlaying = dto.isPlaying
+        entity.isWaiting = dto.isWaiting
+        entity.isSelectable = dto.isSelectable
+        entity.isFacilitator = dto.isFacilitator
+        entity.isChoosing = dto.isChoosing
+        entity.isTimeOut = dto.isTimeOut
+        entity.warmingUp = dto.warmingUp
+        entity.isChosen = dto.isChosen
+        entity.isAdmin = dto.isAdmin
+        entity.attendingSession = dto.attendingSession
+        entity.notified = dto.notified
+        entity.needsSync = dto.needsSync ?? false
+
+        // MARK: - Stats
+        entity.visits = dto.visits
+        entity.gamesCount = dto.gamesCount
+        entity.courtNo = dto.courtNo
+        entity.orderOfPlay = dto.orderOfPlay
+        entity.gameID = dto.gameID
+        entity.playerCategories = Int32(dto.playerCategories)
+        entity.durationInSeconds = dto.durationInSeconds
+
+        return entity
     }
 }
 

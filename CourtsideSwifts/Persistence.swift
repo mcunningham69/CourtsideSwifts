@@ -107,3 +107,43 @@ extension PersistenceController {
     }
 }
 
+extension PersistenceController {
+    /// Wipes every `PlayerStatus` row, merges the deletion into all
+    /// active contexts, and resets the current context.
+    func resetPlayerStatus() throws {
+        let context = container.viewContext           // or a backgroundContext you create
+        try context.performAndWait {
+
+            // 1️⃣ Build a batch‑delete
+            let fetchRequest: NSFetchRequest<NSFetchRequestResult> = PlayerStatus.fetchRequest()
+            let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+            deleteRequest.resultType = .resultTypeObjectIDs        // ✨ Important!
+
+            // 2️⃣ Execute the delete
+            let result = try context.execute(deleteRequest) as? NSBatchDeleteResult
+            let deletedIDs = result?.result as? [NSManagedObjectID] ?? []
+
+            // 3️⃣ Merge changes so SwiftUI / other contexts update instantly
+            if !deletedIDs.isEmpty {
+                let changes: [AnyHashable: Any] = [
+                    NSDeletedObjectsKey: deletedIDs
+                ]
+                NSManagedObjectContext.mergeChanges(
+                    fromRemoteContextSave: changes,
+                    into: [context]
+                )
+            }
+
+            // 4️⃣ Reset the context to clear any cached faults
+            context.reset()
+
+            // 5️⃣ Log confirmation
+            let remaining = try context.count(for: PlayerStatus.fetchRequest())
+            print("🧹 Core Data reset complete – remaining rows: \(remaining)")
+        }
+    }
+    
+
+    
+
+}

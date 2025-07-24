@@ -23,7 +23,7 @@ public class NetworkMonitor: ObservableObject {
                 if self.isConnected {
                     print("✅ Network restored – triggering sync")
                     Task {
-                        await PlayerApiService.shared.syncPendingPlayersToAzure()
+                        try await PlayerApiService.shared.syncPendingPlayersToAzure()
                     }
                 }
             }

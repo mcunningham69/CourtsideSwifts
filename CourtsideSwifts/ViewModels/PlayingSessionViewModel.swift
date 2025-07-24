@@ -7,7 +7,10 @@ class PlayingSessionViewModel: ObservableObject {
     @Published var swapCandidates: [PlayerStatusDTO] = []
     
     @Published var currentSecondTick = Date()
+    
+    @Published var latestGameID: Int32 = 0
 
+    private var isReloading = false
     private var timer: Timer?
 
     @Published var courts: [CourtSession] = []
@@ -28,40 +31,109 @@ class PlayingSessionViewModel: ObservableObject {
         }
     }
 
-
-
     @Published var playerToTimeout: PlayerStatusDTO? = nil
     @Published var nextPlayOrder: Int = 0
-    @Published var useGradeFilter: Bool = true {
+    @Published var useGradeFilter: Bool = false {
         didSet {
+            // Clear selected players if any of them are now ineligible
+            selectedWaitingPlayers.removeAll()
+
             // Re-evaluate isSelectable for all players
             loadParticipantsFromCoreData()
         }
     }
 
-
+    
     private let context = PersistenceController.shared.container.viewContext
     private var cancellables = Set<AnyCancellable> ()
     @Published var selectedWaitingPlayers: Set<UUID> = []
 
     /// Subscribes to a refresh trigger, loads participants, and seeds play order
     init(refreshTrigger: AnyPublisher<Void, Never>) {
-        // Initial load and seed
-        loadParticipantsFromCoreData()
-        seedNextPlayOrder()
+        // 1️⃣  Connect WebSocket immediately
+        WebSocketManager.shared.connect()
 
-        // Subscribe to external refresh and reseed
-        refreshTrigger
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self else { return }
-                self.loadParticipantsFromCoreData()
-                self.seedNextPlayOrder()
+        // 2️⃣  Listen for player updates pushed from the backend
+        NotificationCenter.default.publisher(for: .webSocketDidReceivePlayerUpdate)
+            .compactMap { $0.object as? PlayerStatusDTO }
+            .sink { [weak self] dto in
+                self?.handlePlayerUpdate(dto)   // ← your Core Data update helper
             }
             .store(in: &cancellables)
         
-        //self.resetAllStartedAtToNil()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.loadParticipantsFromCoreData()
+            self.seedNextPlayOrder()
+        }
+
+        refreshTrigger
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                self.reloadParticipantsSafely()
+            }
+            .store(in: &cancellables)
     }
+    
+    
+    private func handlePlayerUpdate(_ dto: PlayerStatusDTO) {
+        let context = PersistenceController.shared.container.viewContext
+        
+        context.perform {
+            let request: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+            request.fetchLimit = 1
+            request.predicate = NSPredicate(format: "uuid == %@", dto.uuid as CVarArg)
+
+            do {
+                let entity = try context.fetch(request).first ?? PlayerStatus(context: context)
+                dto.copyTo(entity: entity)
+
+                // Inject orderOfPlay if needed
+                if entity.attendingSession && entity.orderOfPlay <= 1 {
+                    let maxOrderRequest = NSFetchRequest<NSDictionary>(entityName: "PlayerStatus")
+                    maxOrderRequest.resultType = .dictionaryResultType
+                    maxOrderRequest.propertiesToFetch = ["orderOfPlay"]
+                    maxOrderRequest.predicate = NSPredicate(format: "attendingSession == true")
+                    maxOrderRequest.sortDescriptors = [NSSortDescriptor(key: "orderOfPlay", ascending: false)]
+                    maxOrderRequest.fetchLimit = 1
+
+                    if let result = try context.fetch(maxOrderRequest).first,
+                       let maxOrder = result["orderOfPlay"] as? Int32 {
+                        entity.orderOfPlay = maxOrder + 1
+                    } else {
+                        entity.orderOfPlay = 1
+                    }
+
+                    print("🔢 Injected new orderOfPlay = \(entity.orderOfPlay) for player \(dto.uuid)")
+                }
+
+                entity.needsSync = true
+                try context.save()
+                SyncCoordinator.shared.requestSync()
+
+            } catch {
+                print("❌ Core Data error while applying WS update:", error)
+            }
+        }
+    }
+
+
+    
+
+
+    @MainActor
+    func reloadParticipantsSafely() {
+        guard !isReloading else { return }
+        isReloading = true
+        
+        Task { @MainActor in
+            self.loadParticipantsFromCoreData()
+            self.seedNextPlayOrder()
+            self.isReloading = false
+        }
+    }
+
+
     
     func startTimer() {
         timer?.invalidate()
@@ -114,70 +186,73 @@ class PlayingSessionViewModel: ObservableObject {
         let p1 = swapCandidates[0]
         let p2 = swapCandidates[1]
 
-        // Safely unwrap categories
-        guard let c1 = p1.categoryEnum,
-              let c2 = p2.categoryEnum else {
+        guard
+            let c1 = p1.categoryEnum,
+            let c2 = p2.categoryEnum
+        else {
             print("❌ Missing category")
             return
         }
 
-        let lowerGroup: Set<PlayerCategory> = [.pending, .waiting]
-        let upperGroup: Set<PlayerCategory> = [.chosen, .playing]
+        let lower: Set<PlayerCategory> = [.pending, .waiting]
+        let upper: Set<PlayerCategory> = [.chosen,  .playing]
 
         let from: PlayerStatusDTO
-        let to: PlayerStatusDTO
+        let to  : PlayerStatusDTO
 
-        if lowerGroup.contains(c1) && upperGroup.contains(c2) {
-            from = p1
-            to = p2
-        } else if upperGroup.contains(c1) && lowerGroup.contains(c2) {
-            from = p2
-            to = p1
+        if lower.contains(c1) && upper.contains(c2) {
+            from = p1; to = p2
+        } else if upper.contains(c1) && lower.contains(c2) {
+            from = p2; to = p1
         } else {
             print("❌ Invalid swap selection")
             return
         }
 
-        // Fetch both entities from Core Data using playerID (Int)
-        let fetchRequest: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "playerID == %d OR playerID == %d", from.playerID, to.playerID)
+        // --- Core Data fetch ---
+        let fetch: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+        fetch.predicate = NSPredicate(
+            format: "uuid == %@ OR uuid == %@",
+            from.uuid as CVarArg,
+            to.uuid as CVarArg
+        )
+
 
         do {
-            let results = try context.fetch(fetchRequest)
-            
-            guard let fromEntity = results.first(where: { $0.playerID == from.playerID }),
-                  let toEntity   = results.first(where: { $0.playerID == to.playerID }) else {
-                print("❌ Could not locate both players in Core Data")
+            let results = try context.fetch(fetch)
+            guard
+                let fromEntity = results.first(where: { $0.uuid == from.uuid }),
+                let toEntity   = results.first(where: { $0.uuid == to.uuid })
+            else {
+                print("❌ Could not locate both players")
                 return
             }
 
-            // Swap category
-            let tempCategory = fromEntity.playerCategories
-            fromEntity.playerCategories = toEntity.playerCategories
-            toEntity.playerCategories = tempCategory
-
-            // Swap flags
-            swap(&fromEntity.isWaiting, &toEntity.isWaiting)
-            swap(&fromEntity.isPlaying, &toEntity.isPlaying)
-            swap(&fromEntity.isChosen,  &toEntity.isChosen)
-
-            // Swap courtNo if either is playing
-            let tempCourtNo = fromEntity.courtNo
-            fromEntity.courtNo = toEntity.courtNo
-            toEntity.courtNo = tempCourtNo
+            // --- Swap category and flags ---
+            swap(&fromEntity.playerCategories, &toEntity.playerCategories)
+            swap(&fromEntity.isWaiting,       &toEntity.isWaiting)
+            swap(&fromEntity.isPlaying,       &toEntity.isPlaying)
+            swap(&fromEntity.isChosen,        &toEntity.isChosen)
+            swap(&fromEntity.courtNo,         &toEntity.courtNo)
 
             fromEntity.needsSync = true
-            toEntity.needsSync = true
+            toEntity.needsSync   = true
 
-            try? context.save()
-            print("✅ Players swapped and Core Data saved")
+            try context.save()
+            print("✅ Players swapped & Core Data saved")
 
+            // 🔔 Debounced sync to Azure
+            SyncCoordinator.shared.requestSync()
+
+            // --- UI refresh ---
             swapCandidates.removeAll()
             loadParticipantsFromCoreData()
+
         } catch {
             print("❌ Swap failed: \(error)")
         }
     }
+
     
     @MainActor
     func mergeWaitingPlayers(_ newPlayers: [PlayerStatusDTO]) async {
@@ -210,21 +285,32 @@ class PlayingSessionViewModel: ObservableObject {
         // ✅ 3. Update in-memory court lists if needed (for live UI)
         let courtsToCheck = courts.filter { court in
             court.players.contains(where: { player in
-                player.playerID == p1.playerID || player.playerID == p2.playerID
+                player.uuid == p1.uuid || player.uuid == p2.uuid
             })
         }
 
         for court in courtsToCheck {
-            if let idx1 = court.players.firstIndex(where: { $0.playerID == p1.playerID }) {
+            if let idx1 = court.players.firstIndex(where: { $0.uuid == p1.uuid }) {
                 court.players[idx1] = PlayerStatusDTO(from: p2)
             }
-            if let idx2 = court.players.firstIndex(where: { $0.playerID == p2.playerID }) {
+            if let idx2 = court.players.firstIndex(where: { $0.uuid == p2.uuid }) {
                 court.players[idx2] = PlayerStatusDTO(from: p1)
             }
         }
 
         // ✅ 4. Trigger UI refresh
         objectWillChange.send()
+        
+        let context = PersistenceController.shared.container.viewContext
+        context.performAndWait {
+            do {
+                try context.save()
+                SyncCoordinator.shared.requestSync()
+            } catch {
+                print("❌ Failed to save swapped court sessions: \(error)")
+            }
+        }
+
     }
 
 
@@ -244,34 +330,45 @@ class PlayingSessionViewModel: ObservableObject {
     func randomlySelectTeam() {
         guard let waitingGroup = groupedParticipants.first(where: { $0.category == "Waiting" }) else { return }
 
-        // Get the chooser
+        // ✅ Get the chooser
         guard let chooser = waitingGroup.players.first(where: { $0.isChoosing }) else { return }
 
-        // Get eligible players excluding chooser
-        let eligibleOthers = waitingGroup.players
-            .filter { $0.id != chooser.id && isSelectableForChooser($0) }
+        let players = waitingGroup.players
 
-        // Shuffle and pick 3
+        // ✅ Get eligible players excluding chooser, using full eligibility logic
+        let eligibleOthers = players.filter {
+            $0.id != chooser.id &&
+            isSelectableForChooserInternal(players: players, chooser: chooser, target: $0)
+        }
+
+        // ✅ Shuffle and pick 3
         let selected = Array(eligibleOthers.shuffled().prefix(3))
 
-        // Update the selection
+        // ✅ Update selection (by ID)
         selectedWaitingPlayers = Set(selected.map { $0.id })
     }
+
 
     
     /// Persist a single player's DTO to Core Data and reload
     func updatePlayer(_ player: PlayerStatusDTO) {
-        let entity = PlayerStatus.createOrUpdate(from: player, in: context)
-        entity.playerCategories = Int32(player.playerCategories)
-        entity.orderOfPlay      = Int32(player.orderOfPlay)
-        entity.gameID           = player.gameID
+        // Use bulk update for consistency, even with one player
+        _ = PlayerStatusDTO.bulkCreateOrUpdate(from: [player], in: context, fromAzure: false)
+
         do {
-            try context.save()
-            loadParticipantsFromCoreData()
+            if context.hasChanges {
+                try context.save()
+            }
+
+            // Slight delay to ensure UI update occurs after context save
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.loadParticipantsFromCoreData()
+            }
         } catch {
-            print("Failed to save player update: \(error)")
+            print("❌ Failed to save player update: \(error)")
         }
     }
+
     
     /// Confirm the chooser and selected waiting players as a new "Chosen" team
             /// Confirm the chooser (auto-selected) and selected waiting players as a new "Chosen" team
@@ -292,6 +389,7 @@ class PlayingSessionViewModel: ObservableObject {
             let allGameIDs = groupedParticipants.flatMap { $0.players }.map { $0.gameID }
             let maxGameID = allGameIDs.max() ?? 0
             let nextGameID: Int32 = maxGameID + 1
+            self.latestGameID = nextGameID
 
             // Update each DTO to Chosen
             for var dto in teamDTOs {
@@ -306,12 +404,24 @@ class PlayingSessionViewModel: ObservableObject {
             selectedWaitingPlayers.removeAll()
 
             // Refresh data and reseed play order
-            loadParticipantsFromCoreData()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.loadParticipantsFromCoreData()
+            }
+
             seedNextPlayOrder()
             
             objectWillChange.send()
 
         }
+    
+    private func saveContextAndScheduleSync() {
+        do {
+            try context.save()
+            SyncCoordinator.shared.requestSync()   // 🔔 Debounced upload
+        } catch {
+            print("❌ Core Data save error: \(error)")
+        }
+    }
 
     
     
@@ -358,28 +468,37 @@ class PlayingSessionViewModel: ObservableObject {
         }
 
     
-
     func loadParticipantsFromCoreData() {
         let request: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
         request.predicate = NSPredicate(format: "attendingSession == true")
+
         NotificationCenter.default.post(name: .refreshSession, object: nil)
 
         do {
-            var players = try context.fetch(request).map { PlayerStatusDTO(from: $0) }
+            let coreDataPlayers = try context.fetch(request)
+            var players = coreDataPlayers.map { PlayerStatusDTO(from: $0) }
 
             // 🔁 Determine chooser
             let chooser = players.first(where: { $0.isChoosing && $0.categoryEnum == .waiting })
 
-            // 🧠 Compute isSelectable and persist
+            // 🧠 Compute isSelectable
             players = players.map { player in
                 var updated = player
                 updated.isSelectable = isSelectableForChooserInternal(players: players, chooser: chooser, target: player)
-                persistSelectable(updated, isSelectable: updated.isSelectable)
                 return updated
             }
+            
+            // 🧪 Debug: Confirm isSelectable values
+       /*     for player in players {
+                print("👁️ \(player.playerName ?? "Unnamed") isSelectable: \(player.isSelectable)")
+            }*/
+
+            // ✅ Persist isSelectable for all updated players in one bulk operation
+            PlayerStatusDTO.bulkCreateOrUpdate(from: players, in: context, fromAzure: false)
 
             // ✅ Delegate grouping AND chooser assignment
             self.groupedParticipants = ParticipantSection.group(players)
+
         } catch {
             print("❌ Failed to load participants: \(error.localizedDescription)")
         }
@@ -389,8 +508,31 @@ class PlayingSessionViewModel: ObservableObject {
         }
     }
 
+    func refreshSelectability() {
+        let chooser = players.first(where: { $0.isChoosing && $0.categoryEnum == .waiting })
 
-    private func isSelectableForChooserInternal(players: [PlayerStatusDTO], chooser: PlayerStatusDTO?, target: PlayerStatusDTO) -> Bool {
+        players = players.map { player in
+            var updated = player
+            updated.isSelectable = isSelectableForChooserInternal(players: players, chooser: chooser, target: player)
+            return updated
+        }
+
+        // 🔁 Sync to Core Data if needed
+        let context = PersistenceController.shared.container.viewContext
+        PlayerStatusDTO.bulkCreateOrUpdate(from: players, in: context, fromAzure: false)
+
+        do {
+            try context.save()
+        } catch {
+            print("❌ Failed to persist isSelectable: \(error)")
+        }
+
+        // Update groupings
+        groupedParticipants = ParticipantSection.group(players)
+    }
+
+
+    func isSelectableForChooserInternal(players: [PlayerStatusDTO], chooser: PlayerStatusDTO?, target: PlayerStatusDTO) -> Bool {
         guard useGradeFilter, let chooser = chooser else { return true }
 
         let gradeOrder = ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2"]
@@ -403,47 +545,52 @@ class PlayingSessionViewModel: ObservableObject {
             return false
         }
 
-        // ✅ A1, A2, B1 can choose anyone
-        if chooserIndex <= 2 { return true }
-
-        // ✅ Count eligible players in grade range
-        let eligibleCount = players
-            .filter { $0.categoryEnum == .waiting }
-            .filter {
-                guard let g = $0.grade?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
-                      let idx = gradeOrder.firstIndex(of: g) else { return false }
-                return idx <= chooserIndex + 2
+        // ✅ Always allow if target is same, lower, or up to 2 grades higher
+        if targetIndex >= chooserIndex || targetIndex >= chooserIndex - 2 {
+            if targetIndex <= chooserIndex + 2 {
+                return true
             }
-            .count
+        }
 
-        // ✅ Relax if fewer than 4 eligible players
-        if eligibleCount < 4 {
+        // ✅ Count eligible players in the allowed range (chooserIndex+2 and below)
+        let eligiblePlayers = players.filter {
+            guard let grade = $0.grade?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+                  let index = gradeOrder.firstIndex(of: grade) else { return false }
+
+            return $0.attendingSession && index <= chooserIndex + 2
+        }
+
+        if eligiblePlayers.count < 3 {
+            print("⚠️ Relaxing grade rule: only \(eligiblePlayers.count) eligible players for chooser \(chooser.playerName ?? "")")
             return true
         }
 
-        // ✅ Unrestricted if chooser is A1, A2, B1 (indexes 0, 1, 2)
-        if chooserIndex <= 2 { return true }
-
-        // ✅ Allow same grade or lower
-        if targetIndex >= chooserIndex { return true }
-
-        // ✅ Allow up to 2 grades higher
-        if chooserIndex - targetIndex <= 2 { return true }
-
         return false
-
-
-
     }
 
 
+
+
+
+    
+  
 
     private func persistSelectable(_ dto: PlayerStatusDTO, isSelectable: Bool) {
-        let entity = PlayerStatusDTO.createOrUpdate(from: dto, in: context)
-        entity.isSelectable = isSelectable
-        entity.needsSync = true
-        try? context.save()
+        var copy = dto
+        copy.isSelectable = isSelectable
+        copy.needsSync = true
+
+        _ = PlayerStatusDTO.bulkCreateOrUpdate(from: [copy], in: context, fromAzure: false)
+
+        do {
+            if context.hasChanges {
+                try context.save()
+            }
+        } catch {
+            print("❌ Failed to persist isSelectable: \(error)")
+        }
     }
+
 
     func toggleSelection(for player: PlayerStatusDTO) {
         // ✅ Max 3 selected waiting players
@@ -478,65 +625,7 @@ class PlayingSessionViewModel: ObservableObject {
     }*/
     
     //DELETE ??
-    func isSelectableForChooser(_ target: PlayerStatusDTO) -> Bool {
-        guard useGradeFilter else {
-            return true
-        }
-
-        guard let chooser = groupedParticipants
-            .flatMap({ $0.players })
-            .first(where: { $0.isChoosing }) else {
-            return false
-        }
-
-        let gradeOrder: [String] = ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2"]
-
-        let chooserGrade = chooser.grade?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
-        let targetGrade = target.grade?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
-
-        guard let chooserIndex = gradeOrder.firstIndex(of: chooserGrade),
-              let targetIndex = gradeOrder.firstIndex(of: targetGrade) else {
-            print("⚠️ Invalid grade(s): chooser=\(chooser.grade ?? "nil"), target=\(target.grade ?? "nil")")
-            persistSelectable(target, isSelectable: false)
-            return false
-        }
-
-        // ✅ A1, A2, B1 can select anyone
-        if chooserIndex <= 2 {
-            persistSelectable(target, isSelectable: true)
-            return true
-        }
-
-        // ✅ Eligible waiting players within grade range
-        let eligiblePlayers = groupedParticipants
-            .first(where: { $0.category == "Waiting" })?
-            .players
-            .filter { player in
-                guard let g = player.grade?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
-                      let index = gradeOrder.firstIndex(of: g) else { return false }
-                return index >= chooserIndex - 2 && index <= chooserIndex
-            } ?? []
-
-        // ✅ Relax if not enough eligible players to form a team
-        if eligiblePlayers.count < 4 {
-            print("⚠️ Relaxing grade rule: only \(eligiblePlayers.count) eligible players for chooser \(chooser.playerName ?? "")")
-            persistSelectable(target, isSelectable: true)
-            return true
-        }
-
-        let allowed: Bool
-
-        if chooserIndex <= 2 {
-            allowed = true
-        } else if targetIndex >= chooserIndex {
-            allowed = true
-        } else {
-            allowed = chooserIndex - targetIndex <= 2
-        }
-
-        persistSelectable(target, isSelectable: allowed)
-        return allowed
-    }
+   
 
     func canStartCourt(_ court: CourtSession, activeCourts: [CourtSession]) -> Bool {
         let alreadyAssignedIDs = activeCourts.flatMap { $0.players.map(\.id) }
@@ -612,7 +701,7 @@ class PlayingSessionViewModel: ObservableObject {
             let allEntities = try context.fetch(request)
 
             // 2. Find the one to update
-            guard let entity = allEntities.first(where: { $0.playerID == player.playerID }) else { return }
+            guard let entity = allEntities.first(where: { $0.uuid == player.uuid }) else { return }
 
             // 3. Get max orderOfPlay
             let maxOrder = allEntities.map { $0.orderOfPlay }.max() ?? 0
@@ -633,7 +722,7 @@ class PlayingSessionViewModel: ObservableObject {
             let remainingWaiting = allEntities
                 .filter {
                     $0.playerCategories == Int32(PlayerCategory.waiting.rawValue) &&
-                    $0.playerID != entity.playerID // exclude the one just timed out
+                    $0.uuid != entity.uuid // exclude the one just timed out
                 }
                 .sorted(by: { $0.orderOfPlay < $1.orderOfPlay })
 
@@ -681,31 +770,35 @@ class PlayingSessionViewModel: ObservableObject {
     func moveChosenToPlaying() {
         let context = PersistenceController.shared.container.viewContext
 
-        for group in groupedParticipants {
-            for player in group.players where player.categoryEnum == .chosen {
-                let entity = PlayerStatusDTO.createOrUpdate(from: player, in: context)
-                entity.playerCategories = Int32(PlayerCategory.playing.rawValue)
-                entity.isChosen = false
-                entity.isChoosing = false
-                
-                // Increment game count safely
-                if entity.gamesCount == 0 {
-                    entity.gamesCount = 1
-                } else {
-                    entity.gamesCount += 1
-                }
+        // ✅ Flatten and filter all chosen players from all groups
+        let chosenPlayers = groupedParticipants
+            .flatMap { $0.players }
+            .filter { $0.categoryEnum == .chosen }
 
-            }
+        // ✅ Prepare updated DTOs
+        let updated = chosenPlayers.map { dto -> PlayerStatusDTO in
+            var copy = dto
+            copy.playerCategories = PlayerCategory.playing.rawValue
+            copy.isChosen = false
+            copy.isChoosing = false
+            copy.gamesCount = (copy.gamesCount == 0) ? 1 : (copy.gamesCount + 1)
+            return copy
         }
 
+        // ✅ Perform batch update in Core Data
+        _ = PlayerStatusDTO.bulkCreateOrUpdate(from: updated, in: context, fromAzure: false)
+
         do {
-            try context.save()
-            print("✅ Moved Chosen players to Playing")
-            loadParticipantsFromCoreData()
+            if context.hasChanges {
+                try context.save()
+                print("✅ Moved Chosen players to Playing")
+                loadParticipantsFromCoreData()
+            }
         } catch {
             print("❌ Failed to update player status: \(error)")
         }
     }
+
     
     @MainActor
     func syncWithCloud() async {

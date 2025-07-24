@@ -84,28 +84,42 @@ struct ParticipantSection: Identifiable {
         // 🟡 Chooser assignment logic
         let allPlayers = sections.flatMap { $0.players }
 
-        let waiting = allPlayers.filter { $0.categoryEnum == .waiting }
-        let waitingPlayers = waiting.sorted { $0.orderOfPlay < $1.orderOfPlay }
+        let waitingPlayers = allPlayers
+            .filter { $0.categoryEnum == .waiting }
+            .sorted { $0.orderOfPlay < $1.orderOfPlay }
 
         let nonWaitingPlayers = allPlayers.filter { $0.categoryEnum != .waiting }
 
         let context = PersistenceController.shared.container.viewContext
 
-        for player in nonWaitingPlayers where player.isChoosing {
-            let entity = PlayerStatusDTO.createOrUpdate(from: player, in: context)
-            entity.isChoosing = false
+        // ✅ Update non-waiting players: set isChoosing = false
+        let updatedNonWaiting = nonWaitingPlayers.map { dto -> PlayerStatusDTO in
+            var copy = dto
+            copy.isChoosing = false
+            return copy
         }
 
+        // ✅ Update waiting players: assign a single chooser
         var chooserAssigned = false
-        for player in waitingPlayers {
-            let entity = PlayerStatusDTO.createOrUpdate(from: player, in: context)
-            if !chooserAssigned {
-                entity.isChoosing = true
-                chooserAssigned = true
-            } else {
-                entity.isChoosing = false
-            }
+        let updatedWaiting = waitingPlayers.map { dto -> PlayerStatusDTO in
+            var copy = dto
+            copy.isChoosing = !chooserAssigned
+            chooserAssigned = true
+            return copy
         }
+
+        // ✅ Combine and update in Core Data
+        let updated = updatedNonWaiting + updatedWaiting
+        PlayerStatusDTO.bulkCreateOrUpdate(from: updated, in: context, fromAzure: false)
+
+        do {
+            if context.hasChanges {
+                try context.save()
+            }
+        } catch {
+            print("❌ Failed to save chooser updates: \(error)")
+        }
+
 
         try? context.save()
 

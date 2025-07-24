@@ -20,3 +20,12 @@ class PlayersByCategory: ObservableObject, Identifiable {
         self.isSelectable = isSelectable
     }
 }
+
+extension PlayerCategory {
+    var asInt32: Int32 { Int32(self.rawValue) }
+
+    static func from(_ value: Int32) -> PlayerCategory? {
+        return PlayerCategory(rawValue: Int(value))
+    }
+}
+

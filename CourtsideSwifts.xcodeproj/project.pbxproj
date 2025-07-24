@@ -35,15 +35,31 @@
 		1EC7FC562E1D14E70002FD58 /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		1EB15A772E2FB112001331E5 /* Exceptions for "CourtsideSwifts" folder in "CourtsideSwifts" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				CourtsideSwiftsTests/CourtsideSwiftsTests.swift,
+			);
+			target = 1E582DED2E179D7400CC2E5E /* CourtsideSwifts */;
+		};
+		1EB15A782E2FB112001331E5 /* Exceptions for "CourtsideSwifts" folder in "CourtsideSwiftsTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				CourtsideSwiftsTests/CourtsideSwiftsTests.swift,
+			);
+			target = 1E582DFF2E179D7600CC2E5E /* CourtsideSwiftsTests */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1E582DF02E179D7400CC2E5E /* CourtsideSwifts */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1EB15A772E2FB112001331E5 /* Exceptions for "CourtsideSwifts" folder in "CourtsideSwifts" target */,
+				1EB15A782E2FB112001331E5 /* Exceptions for "CourtsideSwifts" folder in "CourtsideSwiftsTests" target */,
+			);
 			path = CourtsideSwifts;
-			sourceTree = "<group>";
-		};
-		1E582E032E179D7600CC2E5E /* CourtsideSwiftsTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = CourtsideSwiftsTests;
 			sourceTree = "<group>";
 		};
 		1E582E0D2E179D7600CC2E5E /* CourtsideSwiftsUITests */ = {
@@ -84,7 +100,6 @@
 				1EC7FC562E1D14E70002FD58 /* .gitignore */,
 				1E34D5662E1A3D9400016640 /* LaunchScreen.storyboard */,
 				1E582DF02E179D7400CC2E5E /* CourtsideSwifts */,
-				1E582E032E179D7600CC2E5E /* CourtsideSwiftsTests */,
 				1E582E0D2E179D7600CC2E5E /* CourtsideSwiftsUITests */,
 				1E582DEF2E179D7400CC2E5E /* Products */,
 			);
@@ -137,9 +152,6 @@
 			);
 			dependencies = (
 				1E582E022E179D7600CC2E5E /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				1E582E032E179D7600CC2E5E /* CourtsideSwiftsTests */,
 			);
 			name = CourtsideSwiftsTests;
 			packageProductDependencies = (

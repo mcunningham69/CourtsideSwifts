@@ -69,15 +69,16 @@ struct PlayerRowView: View {
     }
 
     var body: some View {
-       // let _ = print("👀 \(player.playerName ?? "") isSelected: \(isSelected)")
-
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(player.playerName ?? "Unnamed")
                         .font(.headline)
                         .bold()
-                        .foregroundColor(player.isChoosing ? .yellow : .primary)
+                        .foregroundColor(
+                            player.isChoosing ? .yellow :
+                            (player.isSelectable ? .primary : .gray)
+                        )
                     if player.isChoosing {
                         Image(systemName: "crown.fill")
                             .foregroundColor(.yellow)
@@ -87,7 +88,13 @@ struct PlayerRowView: View {
                 if let grade = player.grade {
                     Text("Grade: \(grade)")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(player.isSelectable ? .secondary : .gray)
+                }
+
+                if player.categoryEnum == .waiting, !player.isSelectable {
+                    Label("Not Available", systemImage: "xmark.circle")
+                        .font(.caption2)
+                        .foregroundColor(.red)
                 }
 
                 categoryLabel
@@ -95,7 +102,7 @@ struct PlayerRowView: View {
             }
 
             Spacer()
-            
+
             if player.categoryEnum == .playing {
                 TimerLabelView(
                     baseSeconds: Int(player.durationInSeconds),
@@ -105,16 +112,6 @@ struct PlayerRowView: View {
                 )
             }
 
-
-            
-           /* if player.categoryEnum == .playing {
-                TimerLabelView(
-                    baseSeconds: Int(player.durationInSeconds),
-                    startedAt: player.startedAt,
-                    tick: viewModel.currentSecondTick
-                )
-            }*/
-
             Text("\(player.visits) visits")
                 .font(.caption2)
                 .foregroundColor(.secondary)
@@ -122,11 +119,12 @@ struct PlayerRowView: View {
         .padding(8)
         .background(backgroundColor)
         .cornerRadius(8)
-        .contentShape(Rectangle()) // Makes the entire row tappable
+        .contentShape(Rectangle())
         .onTapGesture {
             onTap()
         }
     }
+
 }
 
 extension View {

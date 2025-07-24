@@ -1,26 +1,27 @@
 import SwiftUI
 import Combine
 
-
-
 extension Notification.Name {
     static let refreshSession = Notification.Name("refreshSession")
 }
 
 struct MainSplitView: View {
+
+    @Environment(\.scenePhase) private var scenePhase
+
     @StateObject private var playerListViewModel = PlayerListViewModel()
     @StateObject private var playingSessionViewModel: PlayingSessionViewModel
     @StateObject private var courtsViewModel = CourtsViewModel()
 
-    // Maintain navigation path for iPhone
     @State private var path: [Route] = []
+    @State private var didInitialise = false
 
     init() {
         let refreshPublisher = NotificationCenter.default
             .publisher(for: .refreshSession)
             .map { _ in () }
             .eraseToAnyPublisher()
-        
+
         _playingSessionViewModel = StateObject(
             wrappedValue: PlayingSessionViewModel(refreshTrigger: refreshPublisher)
         )
@@ -35,7 +36,15 @@ struct MainSplitView: View {
                     sessionViewModel: playingSessionViewModel
                 )
                 .onAppear {
-                    playerListViewModel.loadFromCoreData()
+                    initialiseDataOnLaunch()
+                }
+                .onChange(of: scenePhase) { oldValue, newValue in
+                    if newValue == .active {
+                        print("🌞 App resumed - syncing to Azure...")
+                        Task {
+                            try await PlayerApiService.shared.syncPendingPlayersToAzure()
+                        }
+                    }
                 }
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
@@ -53,7 +62,7 @@ struct MainSplitView: View {
                             .onAppear {
                                 playingSessionViewModel.loadParticipantsFromCoreData()
                             }
-                        
+
                     case .courts:
                         CourtListView(
                             viewModel: courtsViewModel,
@@ -76,13 +85,17 @@ struct MainSplitView: View {
                 viewModel: playerListViewModel,
                 sessionViewModel: playingSessionViewModel
             )
-            .onAppear { playerListViewModel.loadFromCoreData() }
+            .onAppear {
+                initialiseDataOnLaunch()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .refreshSession)) { _ in
                 playerListViewModel.loadFromCoreData()
             }
         } content: {
             PlayingSessionView(viewModel: playingSessionViewModel)
-                .onAppear { playingSessionViewModel.loadParticipantsFromCoreData() }
+                .onAppear {
+                    playingSessionViewModel.loadParticipantsFromCoreData()
+                }
         } detail: {
             CourtListView(
                 viewModel: courtsViewModel,
@@ -90,9 +103,28 @@ struct MainSplitView: View {
             )
         }
     }
+
+    private func initialiseDataOnLaunch() {
+        guard !didInitialise else { return }
+        didInitialise = true
+
+        Task {
+            do {
+                try await PlayerApiService.shared.fetchAndStorePlayers(
+                    context: PersistenceController.shared.container.viewContext
+                )
+                await MainActor.run {
+                    playerListViewModel.loadFromCoreData()
+                    playingSessionViewModel.loadParticipantsFromCoreData()
+                }
+                print("✅ Initial data load from Azure complete.")
+            } catch {
+                print("❌ Failed to initialise from Azure: \(error)")
+            }
+        }
+    }
 }
 
-// MARK: - Routing Enum
 private enum Route: Hashable {
     case playingSession, courts
 }
@@ -100,4 +132,3 @@ private enum Route: Hashable {
 #Preview {
     MainSplitView()
 }
-
