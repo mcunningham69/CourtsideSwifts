@@ -385,9 +385,20 @@ class PlayerListViewModel: ObservableObject {
             players[i].visits += 1
             players[i].isChosen = false
             players[i].warmingUp = true
-            players[i].playerCategories = PlayerCategory.waiting.rawValue
+            players[i].playerCategories = 1 //PlayerCategory.waiting.rawValue
             players[i].needsSync = true
             players[i].orderOfPlay = nextOrder
+            players[i].isPlaying = false
+            players[i].isWaiting = true
+            players[i].isSelectable = true
+            players[i].isTimeOut = false
+            players[i].gamesCount = 0
+            players[i].courtNo = 0
+            players[i].startedAt = ""
+            players[i].finishedAt = ""
+            players[i].needsSync = true
+            players[i].notified = false
+
             nextOrder += 1
         }
 
@@ -436,9 +447,19 @@ class PlayerListViewModel: ObservableObject {
                 players[i].isChosen = false
                 players[i].warmingUp = false
                 players[i].isTimeOut = false
-                players[i].playerCategories = PlayerCategory.pending.rawValue
+                players[i].playerCategories = 0 //PlayerCategory.pending.rawValue
                 players[i].gamesCount = 0
                 players[i].needsSync = true
+                players[i].orderOfPlay = 0
+                players[i].isWaiting = false
+                players[i].isPlaying = false
+                players[i].isSelectable = false
+                players[i].courtNo = 0
+                players[i].startedAt = ""
+                players[i].finishedAt = ""
+                players[i].needsSync = true
+                players[i].notified = false
+                
             }
         }
 
