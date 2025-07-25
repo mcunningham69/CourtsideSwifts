@@ -20,7 +20,7 @@ xcuserdata/
 # SwiftPM
 .swiftpm/
 .build/
-.xcworkspace
+*.xcworkspace
 
 # CocoaPods
 Pods/
