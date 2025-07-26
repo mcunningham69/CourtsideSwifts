@@ -562,6 +562,10 @@ extension PlayerStatusDTO {
                 updated.needsSync = false
 
                 _ = syncPlayerStatus(updated, fromAzure: true, in: PersistenceController.shared.container.viewContext)
+                
+
+                }
+
             }
 
         } catch {
@@ -621,6 +625,10 @@ extension DateFormatter {
         formatter.timeZone = .current
         return formatter
     }()
+}
+
+struct PlayerCheckOutDTO: Codable {
+    let uuid: String
 }
 
 

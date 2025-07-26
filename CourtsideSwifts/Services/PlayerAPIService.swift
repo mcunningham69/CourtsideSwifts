@@ -108,10 +108,13 @@ final class PlayerApiService: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        for dto in players {
+            print("📤 Sending UUID for checkout: \(dto.uuid)")
+        }
 
-        // 🔄 Instead of mapping, just extract UUIDs directly
-        let uuids = players.map { ["uuid": $0.uuid] }
-        request.httpBody = try JSONEncoder().encode(uuids)
+        let payload = players.map { PlayerCheckOutDTO(uuid: $0.uuid.uuidString) }
+        request.httpBody = try JSONEncoder().encode(payload)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -119,8 +122,6 @@ final class PlayerApiService: ObservableObject {
               (200..<300).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
         }
-
-        // Optional: parse or log response if needed
     }
 
 
