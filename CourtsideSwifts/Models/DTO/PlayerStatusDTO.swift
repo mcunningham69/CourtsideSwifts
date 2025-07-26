@@ -441,8 +441,8 @@ extension PlayerStatusDTO {
         return results
     }
     
-
-
+    
+    
     
     // MARK: - Per‑row merge helper
     /// Copies **only the changed** fields from the DTO into the Core‑Data entity.
@@ -516,31 +516,31 @@ extension PlayerStatusDTO {
     
     // MARK: - Wire into view model
     @MainActor func addToViewModel(_ viewModel: PlayerListViewModel) {
-            PlayerStatusDTO.addPlayer(self)
-            viewModel.loadFromCoreData()
-        }
+        PlayerStatusDTO.addPlayer(self)
+        viewModel.loadFromCoreData()
+    }
     
     // MARK: - Upload and persist logic
-       static func uploadThenSaveToCoreData(_ dto: PlayerStatusDTO) async {
-           do {
-               // 🔼 First, upload to Azure
-               let updated = try await PlayerApiService.shared.syncPlayerStatus(dto)
-
-               // ✅ Then store to Core Data
-               _ = syncPlayerStatus(updated, fromAzure: true,in: PersistenceController.shared.container.viewContext)
-
-           } catch {
-               // 🔁 If upload fails (e.g. offline), queue it locally
-               print("⚠️ Upload failed: \(error.localizedDescription) — saving locally for retry")
-               _ = syncPlayerStatus(dto, fromAzure: false,in: PersistenceController.shared.container.viewContext)
-           }
-       }
+    static func uploadThenSaveToCoreData(_ dto: PlayerStatusDTO) async {
+        do {
+            // 🔼 First, upload to Azure
+            let updated = try await PlayerApiService.shared.syncPlayerStatus(dto)
+            
+            // ✅ Then store to Core Data
+            _ = syncPlayerStatus(updated, fromAzure: true,in: PersistenceController.shared.container.viewContext)
+            
+        } catch {
+            // 🔁 If upload fails (e.g. offline), queue it locally
+            print("⚠️ Upload failed: \(error.localizedDescription) — saving locally for retry")
+            _ = syncPlayerStatus(dto, fromAzure: false,in: PersistenceController.shared.container.viewContext)
+        }
+    }
     
     static func checkOutPlayersAndSave(_ dtos: [PlayerStatusDTO]) async {
         do {
             // 🔼 Send checkout list to FastAPI
             try await PlayerApiService.shared.checkOutPlayers(dtos)
-
+            
             // ✅ Then update Core Data for each player
             for dto in dtos {
                 var updated = dto
@@ -560,23 +560,24 @@ extension PlayerStatusDTO {
                 updated.isTimeOut = false
                 updated.isChoosing = false
                 updated.needsSync = false
-
+                
                 _ = syncPlayerStatus(updated, fromAzure: true, in: PersistenceController.shared.container.viewContext)
                 
-
-                }
-
             }
-
         } catch {
             print("⚠️ Batch checkout failed: \(error.localizedDescription) — falling back to local-only update")
             for dto in dtos {
                 _ = syncPlayerStatus(dto, fromAzure: false, in: PersistenceController.shared.container.viewContext)
             }
+            
+            
         }
+        
     }
-    
 }
+
+    
+
 
 extension PlayerStatusDTO {
     /*@discardableResult
