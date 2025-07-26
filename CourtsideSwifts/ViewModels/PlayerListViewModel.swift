@@ -441,29 +441,27 @@ class PlayerListViewModel: ObservableObject {
             return
         }
 
-        for i in players.indices {
-            if selectedPlayers.contains(players[i]) {
-                players[i].attendingSession = false
-                players[i].isChosen = false
-                players[i].warmingUp = false
-                players[i].isTimeOut = false
-                players[i].playerCategories = 0 //PlayerCategory.pending.rawValue
-                players[i].gamesCount = 0
-                players[i].needsSync = true
-                players[i].orderOfPlay = 0
-                players[i].isWaiting = false
-                players[i].isPlaying = false
-                players[i].isSelectable = false
-                players[i].courtNo = 0
-                players[i].startedAt = ""
-                players[i].finishedAt = ""
-                players[i].needsSync = true
-                players[i].notified = false
-                
-            }
+        for i in players.indices where selectedPlayers.contains(players[i]) {
+            players[i].attendingSession = false
+            players[i].isChosen = false
+            players[i].warmingUp = false
+            players[i].isTimeOut = false
+            players[i].playerCategories = 0
+            players[i].gamesCount = 0
+            players[i].needsSync = false  // ✅ Already synced
+            players[i].orderOfPlay = 0
+            players[i].isWaiting = false
+            players[i].isPlaying = false
+            players[i].isSelectable = false
+            players[i].courtNo = 0
+            players[i].startedAt = ""
+            players[i].finishedAt = ""
+            players[i].notified = false
         }
 
         sessionViewModel.refreshSelectability()
+        
+        await PlayerStatusDTO.checkOutPlayersAndSave(affected)
 
         // 🔄 Persist & upload players
         let playersToSync = players.filter { $0.needsSync == true }

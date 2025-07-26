@@ -654,8 +654,8 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "198"
-            endingLineNumber = "198"
+            startingLineNumber = "222"
+            endingLineNumber = "222"
             landmarkName = "syncPendingPlayersToAzure()"
             landmarkType = "7">
          </BreakpointContent>
@@ -670,8 +670,8 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "204"
-            endingLineNumber = "204"
+            startingLineNumber = "228"
+            endingLineNumber = "228"
             landmarkName = "syncPendingPlayersToAzure()"
             landmarkType = "7">
          </BreakpointContent>
@@ -686,8 +686,8 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "203"
-            endingLineNumber = "203"
+            startingLineNumber = "227"
+            endingLineNumber = "227"
             landmarkName = "syncPendingPlayersToAzure()"
             landmarkType = "7">
          </BreakpointContent>
@@ -750,10 +750,40 @@
             filePath = "CourtsideSwifts/ViewModels/PlayerListViewModel.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "485"
-            endingLineNumber = "485"
+            startingLineNumber = "483"
+            endingLineNumber = "483"
             landmarkName = "updateCoreData(for:)"
             landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "9E61240C-219C-4E2D-B637-DAD67687A6D1 - bcaeff63391ecc98"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "CourtsideSwifts.PlayerListViewModel.updateCoreData(for: CourtsideSwifts.PlayerStatusDTO) -&gt; ()"
+                  moduleName = "CourtsideSwifts.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/mcunningham/GitHub/CourtsideSwifts/CourtsideSwifts/ViewModels/PlayerListViewModel.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "485"
+                  endingLineNumber = "485">
+               </Location>
+               <Location
+                  uuid = "9E61240C-219C-4E2D-B637-DAD67687A6D1 - bcaeff63391eccc6"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "CourtsideSwifts.PlayerListViewModel.updateCoreData(for: CourtsideSwifts.PlayerStatusDTO) -&gt; ()"
+                  moduleName = "CourtsideSwifts.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/mcunningham/GitHub/CourtsideSwifts/CourtsideSwifts/ViewModels/PlayerListViewModel.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "483"
+                  endingLineNumber = "483">
+               </Location>
+            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -814,8 +844,8 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "153"
-            endingLineNumber = "153"
+            startingLineNumber = "177"
+            endingLineNumber = "177"
             landmarkName = "uploadToAzure(_:)"
             landmarkType = "7">
          </BreakpointContent>
@@ -894,8 +924,8 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "229"
-            endingLineNumber = "229"
+            startingLineNumber = "253"
+            endingLineNumber = "253"
             landmarkName = "resetLocalData()"
             landmarkType = "7">
          </BreakpointContent>
@@ -910,8 +940,8 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "233"
-            endingLineNumber = "233"
+            startingLineNumber = "257"
+            endingLineNumber = "257"
             landmarkName = "resetLocalData()"
             landmarkType = "7">
          </BreakpointContent>
@@ -1006,8 +1036,8 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "246"
-            endingLineNumber = "246"
+            startingLineNumber = "270"
+            endingLineNumber = "270"
             landmarkName = "resetAndFetchFreshData()"
             landmarkType = "7">
          </BreakpointContent>
@@ -1070,10 +1100,40 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "257"
-            endingLineNumber = "257"
+            startingLineNumber = "281"
+            endingLineNumber = "281"
             landmarkName = "resetAndFetchFreshData()"
             landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "48FBCAEB-C3B5-4A65-B096-B3B3576639F8 - f02e417f48747f66"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "(5) suspend resume partial function for CourtsideSwifts.PlayerApiService.resetAndFetchFreshData() async throws -&gt; ()"
+                  moduleName = "CourtsideSwifts.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/mcunningham/GitHub/CourtsideSwifts/CourtsideSwifts/Services/PlayerAPIService.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "257"
+                  endingLineNumber = "257">
+               </Location>
+               <Location
+                  uuid = "48FBCAEB-C3B5-4A65-B096-B3B3576639F8 - f02e417f4874638e"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "(5) suspend resume partial function for CourtsideSwifts.PlayerApiService.resetAndFetchFreshData() async throws -&gt; ()"
+                  moduleName = "CourtsideSwifts.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/mcunningham/GitHub/CourtsideSwifts/CourtsideSwifts/Services/PlayerAPIService.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "281"
+                  endingLineNumber = "281">
+               </Location>
+            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -1118,10 +1178,40 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "179"
-            endingLineNumber = "179"
+            startingLineNumber = "203"
+            endingLineNumber = "203"
             landmarkName = "uploadToAzure(_:)"
             landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "D6B1C513-964B-4E73-8738-D61CF83E5829 - d6621c020562f494"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "(3) suspend resume partial function for CourtsideSwifts.PlayerApiService.uploadToAzure(CourtsideSwifts.PlayerStatusDTO) async throws -&gt; Swift.Bool"
+                  moduleName = "CourtsideSwifts.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/mcunningham/GitHub/CourtsideSwifts/CourtsideSwifts/Services/PlayerAPIService.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "179"
+                  endingLineNumber = "179">
+               </Location>
+               <Location
+                  uuid = "D6B1C513-964B-4E73-8738-D61CF83E5829 - d6621c020562f1bc"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "(3) suspend resume partial function for CourtsideSwifts.PlayerApiService.uploadToAzure(CourtsideSwifts.PlayerStatusDTO) async throws -&gt; Swift.Bool"
+                  moduleName = "CourtsideSwifts.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/mcunningham/GitHub/CourtsideSwifts/CourtsideSwifts/Services/PlayerAPIService.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "203"
+                  endingLineNumber = "203">
+               </Location>
+            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -1134,8 +1224,8 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "200"
-            endingLineNumber = "200"
+            startingLineNumber = "224"
+            endingLineNumber = "224"
             landmarkName = "syncPendingPlayersToAzure()"
             landmarkType = "7">
          </BreakpointContent>
@@ -1150,10 +1240,40 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "236"
-            endingLineNumber = "236"
+            startingLineNumber = "260"
+            endingLineNumber = "260"
             landmarkName = "resetLocalData()"
             landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "F7291C06-756F-434F-8731-D51553C10DA9 - b25592a541f4ebdc"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "(1) suspend resume partial function for CourtsideSwifts.PlayerApiService.resetLocalData() async throws -&gt; ()"
+                  moduleName = "CourtsideSwifts.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/mcunningham/GitHub/CourtsideSwifts/CourtsideSwifts/Services/PlayerAPIService.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "236"
+                  endingLineNumber = "236">
+               </Location>
+               <Location
+                  uuid = "F7291C06-756F-434F-8731-D51553C10DA9 - b25592a541f4eeb4"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "(1) suspend resume partial function for CourtsideSwifts.PlayerApiService.resetLocalData() async throws -&gt; ()"
+                  moduleName = "CourtsideSwifts.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/mcunningham/GitHub/CourtsideSwifts/CourtsideSwifts/Services/PlayerAPIService.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "260"
+                  endingLineNumber = "260">
+               </Location>
+            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -1166,8 +1286,8 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "166"
-            endingLineNumber = "166"
+            startingLineNumber = "190"
+            endingLineNumber = "190"
             landmarkName = "uploadToAzure(_:)"
             landmarkType = "7">
          </BreakpointContent>
@@ -1182,8 +1302,8 @@
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "196"
-            endingLineNumber = "196"
+            startingLineNumber = "220"
+            endingLineNumber = "220"
             landmarkName = "syncPendingPlayersToAzure()"
             landmarkType = "7">
          </BreakpointContent>
@@ -1192,7 +1312,7 @@
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
             uuid = "81EC99A3-D30F-4CE1-905C-0BF9C16D8C63"
-            shouldBeEnabled = "Yes"
+            shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
@@ -1265,6 +1385,22 @@
             startingLineNumber = "64"
             endingLineNumber = "64"
             landmarkName = "handleMessage(_:)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "AA9E70F8-663E-45F8-ADB8-883ADE89EA66"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "CourtsideSwifts/Services/PlayerAPIService.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "105"
+            endingLineNumber = "105"
+            landmarkName = "checkOutPlayers(_:)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>

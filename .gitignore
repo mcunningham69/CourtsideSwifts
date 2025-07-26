@@ -47,3 +47,5 @@ GoogleService-Info.plist
 
 # Xcode Previews cache
 *.preview-thumbnails
+
+.fake

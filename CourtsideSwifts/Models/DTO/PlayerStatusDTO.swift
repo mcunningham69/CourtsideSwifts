@@ -535,6 +535,43 @@ extension PlayerStatusDTO {
                _ = syncPlayerStatus(dto, fromAzure: false,in: PersistenceController.shared.container.viewContext)
            }
        }
+    
+    static func checkOutPlayersAndSave(_ dtos: [PlayerStatusDTO]) async {
+        do {
+            // 🔼 Send checkout list to FastAPI
+            try await PlayerApiService.shared.checkOutPlayers(dtos)
+
+            // ✅ Then update Core Data for each player
+            for dto in dtos {
+                var updated = dto
+                updated.attendingSession = false
+                updated.isPlaying = false
+                updated.isChosen = false
+                updated.isWaiting = false
+                updated.warmingUp = false
+                updated.notified = false
+                updated.courtNo = 0
+                updated.startedAt = ""
+                updated.finishedAt = ""
+                updated.playerCategories = 0
+                updated.gamesCount = 0
+                updated.orderOfPlay = 0
+                updated.isSelectable = false
+                updated.isTimeOut = false
+                updated.isChoosing = false
+                updated.needsSync = false
+
+                _ = syncPlayerStatus(updated, fromAzure: true, in: PersistenceController.shared.container.viewContext)
+            }
+
+        } catch {
+            print("⚠️ Batch checkout failed: \(error.localizedDescription) — falling back to local-only update")
+            for dto in dtos {
+                _ = syncPlayerStatus(dto, fromAzure: false, in: PersistenceController.shared.container.viewContext)
+            }
+        }
+    }
+    
 }
 
 extension PlayerStatusDTO {

@@ -100,6 +100,30 @@ final class PlayerApiService: ObservableObject {
         }
     }
 
+    
+    func checkOutPlayers(_ players: [PlayerStatusDTO]) async throws {
+        let baseURL = URL(string: "https://swifts-player-sync.azurewebsites.net")!
+        let url = baseURL.appendingPathComponent("/players/checkout")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // 🔄 Instead of mapping, just extract UUIDs directly
+        let uuids = players.map { ["uuid": $0.uuid] }
+        request.httpBody = try JSONEncoder().encode(uuids)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        // Optional: parse or log response if needed
+    }
+
+
 
     func upload(_ dto: inout PlayerStatusDTO,
                 context: NSManagedObjectContext) async throws {
