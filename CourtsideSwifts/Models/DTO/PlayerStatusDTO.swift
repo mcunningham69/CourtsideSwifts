@@ -71,7 +71,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         case notified
         case gamesCount = "gamescount"
         case courtNo = "courtno"
-        case durationInSeconds
+        case durationInSeconds = "durationinseconds"
         case startedAt = "startedat"
         case finishedAt = "finishedat"
         case orderOfPlay = "orderofplay"
