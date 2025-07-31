@@ -559,7 +559,7 @@ extension PlayerStatusDTO {
                 updated.isSelectable = false
                 updated.isTimeOut = false
                 updated.isChoosing = false
-                updated.needsSync = false
+                updated.needsSync = true
                 
                 _ = syncPlayerStatus(updated, fromAzure: true, in: PersistenceController.shared.container.viewContext)
                 

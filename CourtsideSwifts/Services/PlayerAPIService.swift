@@ -229,7 +229,7 @@ final class PlayerApiService: ObservableObject {
         }
 
         var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
+        request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let encoded = try JSONEncoder().encode(dto)
@@ -240,8 +240,20 @@ final class PlayerApiService: ObservableObject {
         }
 
         let (data, response) = try await URLSession.shared.data(for: request)
-
+        
         if let httpResponse = response as? HTTPURLResponse {
+            print("🔵 PATCH Status: \(httpResponse.statusCode)")
+
+            if (200..<300).contains(httpResponse.statusCode) {
+                print("✅ PATCH success for \(dto.uuid)")
+                return true
+            } else {
+                let body = String(data: data, encoding: .utf8) ?? "No response body"
+                print("🔴 PATCH failed: \(body)")
+            }
+        }
+
+    /*    if let httpResponse = response as? HTTPURLResponse {
             print("🔵 Status code: \(httpResponse.statusCode)")
 
             if (200..<300).contains(httpResponse.statusCode) {
@@ -254,7 +266,7 @@ final class PlayerApiService: ObservableObject {
             }
         } else {
             print("❌ Invalid HTTP response")
-        }
+        }*/
 
         return false
     }

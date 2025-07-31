@@ -6,10 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		1E34D5672E1A3D9400016640 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 1E34D5662E1A3D9400016640 /* LaunchScreen.storyboard */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
 		1E582E012E179D7600CC2E5E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -28,7 +24,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		1E34D5662E1A3D9400016640 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		1E582DEE2E179D7400CC2E5E /* CourtsideSwifts.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CourtsideSwifts.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1E582E002E179D7600CC2E5E /* CourtsideSwiftsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CourtsideSwiftsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1E582E0A2E179D7600CC2E5E /* CourtsideSwiftsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CourtsideSwiftsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -98,7 +93,6 @@
 			isa = PBXGroup;
 			children = (
 				1EC7FC562E1D14E70002FD58 /* .gitignore */,
-				1E34D5662E1A3D9400016640 /* LaunchScreen.storyboard */,
 				1E582DF02E179D7400CC2E5E /* CourtsideSwifts */,
 				1E582E0D2E179D7600CC2E5E /* CourtsideSwiftsUITests */,
 				1E582DEF2E179D7400CC2E5E /* Products */,
@@ -232,7 +226,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1E34D5672E1A3D9400016640 /* LaunchScreen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

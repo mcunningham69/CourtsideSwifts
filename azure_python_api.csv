@@ -1,0 +1,9 @@
+source venv/bin/activate
+docker buildx create --use --name amd64builder
+docker buildx build --platform linux/amd64 -t mcunningham69/player-sync-app:latest . --push
+az webapp restart --name swifts-player-sync --resource-group SwiftsApiRG
+az webapp log tail --name swifts-player-sync --resource-group SwiftsApiRG
+
+az webapp log config --name swifts-player-sync --resource-group SwiftsApiRG --application-logging true --level information
+uvicorn main:app --reload
+
