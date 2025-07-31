@@ -21,9 +21,12 @@ struct MainSplitView: View {
             .publisher(for: .refreshSession)
             .map { _ in () }
             .eraseToAnyPublisher()
+        
+        // Provide a sessionID — you may want to generate or inject this from a higher level
+        let sessionID = UUID() // or load from persistent source if needed
 
         _playingSessionViewModel = StateObject(
-            wrappedValue: PlayingSessionViewModel(refreshTrigger: refreshPublisher)
+            wrappedValue: PlayingSessionViewModel(sessionID: sessionID, refreshTrigger: refreshPublisher)
         )
     }
 

@@ -104,6 +104,13 @@ struct PlayingSessionView: View {
         } message: {
             Text("This will move the player back to Pending.")
         }
+        
+        .onAppear {
+            Task {
+                await viewModel.loadSessionSettings()
+            }
+        }
+
       /*  .onAppear {
             // only reload when this view appears
             viewModel.loadParticipantsFromCoreData()
@@ -112,6 +119,11 @@ struct PlayingSessionView: View {
 }
 
 #Preview {
-    PlayingSessionView(viewModel: PlayingSessionViewModel(refreshTrigger: Just(())
-        .eraseToAnyPublisher()))
+    PlayingSessionView(
+        viewModel: PlayingSessionViewModel(
+            sessionID: UUID(),
+            refreshTrigger: Just(())
+        .eraseToAnyPublisher()
+        )
+    )
 }

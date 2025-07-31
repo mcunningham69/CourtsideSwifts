@@ -243,7 +243,7 @@ struct PlayerListView: View {
 #Preview {
     PlayerListView(
         viewModel: PlayerListViewModel(),
-        sessionViewModel: PlayingSessionViewModel(refreshTrigger: Just(()).eraseToAnyPublisher())
+        sessionViewModel: PlayingSessionViewModel(sessionID: UUID(), refreshTrigger: Just(()).eraseToAnyPublisher())
     )
 }
 

@@ -100,6 +100,54 @@ final class PlayerApiService: ObservableObject {
         }
     }
 
+    func updateSessionSettings(_ dto: SessionSettingsDTO) async throws {
+        let baseURL = URL(string: "https://swifts-player-sync.azurewebsites.net")!
+        let url = baseURL.appendingPathComponent("/session-settings/\(dto.sessionID.uuidString)")
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(dto)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+    }
+    
+    func loadSessionSettings(sessionID: UUID) async throws -> SessionSettingsDTO? {
+        let baseURL = URL(string: "https://swifts-player-sync.azurewebsites.net")!
+        let url = baseURL.appendingPathComponent("/session-settings/\(sessionID.uuidString)")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        let dto = try JSONDecoder().decode(SessionSettingsDTO.self, from: data)
+        return dto
+    }
+
+
+    func fetchSessionSettings(for sessionID: UUID) async throws -> SessionSettingsDTO {
+        let baseURL = URL(string: "https://swifts-player-sync.azurewebsites.net")!
+        let url = baseURL.appendingPathComponent("/session-settings/\(sessionID.uuidString)")
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SessionSettingsDTO.self, from: data)
+    }
+    
+
     
     func checkOutPlayers(_ players: [PlayerStatusDTO]) async throws {
         let baseURL = URL(string: "https://swifts-player-sync.azurewebsites.net")!

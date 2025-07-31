@@ -44,6 +44,7 @@ GoogleService-Info.plist
 # Misc
 *.orig
 *.DS_Store
+*.login
 
 # Xcode Previews cache
 *.preview-thumbnails

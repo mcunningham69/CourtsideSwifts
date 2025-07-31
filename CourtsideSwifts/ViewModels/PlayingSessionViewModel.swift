@@ -30,6 +30,9 @@ class PlayingSessionViewModel: ObservableObject {
             updateGroupedParticipants()
         }
     }
+    
+    @Published var sessionID: UUID
+
 
     @Published var playerToTimeout: PlayerStatusDTO? = nil
     @Published var nextPlayOrder: Int = 0
@@ -48,33 +51,109 @@ class PlayingSessionViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable> ()
     @Published var selectedWaitingPlayers: Set<UUID> = []
 
-    /// Subscribes to a refresh trigger, loads participants, and seeds play order
-    init(refreshTrigger: AnyPublisher<Void, Never>) {
-        // 1️⃣  Connect WebSocket immediately
-        WebSocketManager.shared.connect()
+    // MARK: - Init
+        init(sessionID: UUID, refreshTrigger: AnyPublisher<Void, Never>) {
+            self.sessionID = sessionID
 
-        // 2️⃣  Listen for player updates pushed from the backend
-        NotificationCenter.default.publisher(for: .webSocketDidReceivePlayerUpdate)
-            .compactMap { $0.object as? PlayerStatusDTO }
-            .sink { [weak self] dto in
-                self?.handlePlayerUpdate(dto)   // ← your Core Data update helper
+            // 1️⃣ WebSocket
+            WebSocketManager.shared.connect()
+
+            // 2️⃣ Listen for WebSocket updates
+            NotificationCenter.default.publisher(for: .webSocketDidReceivePlayerUpdate)
+                .compactMap { $0.object as? PlayerStatusDTO }
+                .sink { [weak self] dto in
+                    self?.handlePlayerUpdate(dto)
+                }
+                .store(in: &cancellables)
+
+            // 3️⃣ Debounced refresh
+            refreshTrigger
+                .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    self?.reloadParticipantsSafely()
+                }
+                .store(in: &cancellables)
+
+            // 4️⃣ Initial load (deferred to allow use of self)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                Task {
+                    await self.loadInitialState()
+                }
             }
-            .store(in: &cancellables)
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.loadParticipantsFromCoreData()
-            self.seedNextPlayOrder()
         }
-
-        refreshTrigger
-            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self else { return }
-                self.reloadParticipantsSafely()
-            }
-            .store(in: &cancellables)
+    
+    @MainActor
+    private func loadInitialState() async {
+        await loadSessionSettings()      // ← load `useGradeFilter` from Core Data or API
+        loadParticipantsFromCoreData()   // ← then load players and compute selectability
+        seedNextPlayOrder()
     }
     
+    func toggleGradeFilter(_ isOn: Bool) async {
+        useGradeFilter = isOn
+
+        let dto = SessionSettingsDTO(
+            sessionID: sessionID,
+            userGradeFilter: isOn,
+            updatedAt: Date()
+        )
+
+        do {
+            try await PlayerApiService.shared.updateSessionSettings(dto)
+            await SessionSettingsDTO.saveToCoreData(dto)
+        } catch {
+            print("⚠️ Failed to sync session setting: \(error.localizedDescription)")
+        }
+
+        recalculateSelectability()
+    }
+    
+    func recalculateSelectability() {
+        let chooser = players.first(where: { $0.isChoosing && $0.categoryEnum == .waiting })
+
+        players = players.map { player in
+            var updated = player
+            updated.isSelectable = isSelectableForChooserInternal(
+                players: players,
+                chooser: chooser,
+                target: player
+            )
+            return updated
+        }
+    }
+
+    
+    @MainActor
+    func loadSessionSettings() async {
+        let sessionID = sessionID
+
+        do {
+            let dto = try await PlayerApiService.shared.fetchSessionSettings(for: sessionID)
+            useGradeFilter = dto.userGradeFilter
+        } catch {
+            print("⚠️ Failed to load session settings: \(error.localizedDescription)")
+        }
+    }
+
+    @MainActor
+    func saveSessionSettings() async {
+        let sessionID = sessionID
+
+        let dto = SessionSettingsDTO(
+            sessionID: sessionID,
+            userGradeFilter: useGradeFilter,
+            updatedAt: Date()
+        )
+
+        do {
+            try await PlayerApiService.shared.updateSessionSettings(dto)
+        } catch {
+            print("⚠️ Failed to update session settings: \(error.localizedDescription)")
+        }
+    }
+
+    
+
     
     private func handlePlayerUpdate(_ dto: PlayerStatusDTO) {
         let context = PersistenceController.shared.container.viewContext
@@ -107,7 +186,7 @@ class PlayingSessionViewModel: ObservableObject {
                     print("🔢 Injected new orderOfPlay = \(entity.orderOfPlay) for player \(dto.uuid)")
                 }
 
-                entity.needsSync = true
+               // entity.needsSync = true
                 try context.save()
                 SyncCoordinator.shared.requestSync()
 
@@ -396,8 +475,15 @@ class PlayingSessionViewModel: ObservableObject {
                 dto.playerCategories = PlayerCategory.chosen.rawValue
                 dto.isChosen         = true
                 dto.isChoosing       = false
+                dto.isWaiting        = false
+                dto.needsSync       = true
                 dto.gameID           = nextGameID
                 updatePlayer(dto)
+                
+                // ✅ Push to Azure and notify other devices
+                Task {
+                    await PlayerStatusDTO.uploadThenSaveToCoreData(dto)
+                }
             }
 
             // Reset selection state
@@ -469,44 +555,52 @@ class PlayingSessionViewModel: ObservableObject {
 
     
     func loadParticipantsFromCoreData() {
-        let request: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
-        request.predicate = NSPredicate(format: "attendingSession == true")
+        let sessionID = sessionID
 
-        NotificationCenter.default.post(name: .refreshSession, object: nil)
-
-        do {
-            let coreDataPlayers = try context.fetch(request)
-            var players = coreDataPlayers.map { PlayerStatusDTO(from: $0) }
-
-            // 🔁 Determine chooser
-            let chooser = players.first(where: { $0.isChoosing && $0.categoryEnum == .waiting })
-
-            // 🧠 Compute isSelectable
-            players = players.map { player in
-                var updated = player
-                updated.isSelectable = isSelectableForChooserInternal(players: players, chooser: chooser, target: player)
-                return updated
+        Task {
+            // 🔄 1. Load session settings for this session
+            if let settings = try? await PlayerApiService.shared.loadSessionSettings(sessionID: sessionID) {
+                DispatchQueue.main.async {
+                    self.useGradeFilter = settings.userGradeFilter
+                }
             }
-            
-            // 🧪 Debug: Confirm isSelectable values
-       /*     for player in players {
-                print("👁️ \(player.playerName ?? "Unnamed") isSelectable: \(player.isSelectable)")
-            }*/
 
-            // ✅ Persist isSelectable for all updated players in one bulk operation
-            PlayerStatusDTO.bulkCreateOrUpdate(from: players, in: context, fromAzure: false)
+            // 🔄 2. Fetch players from Core Data
+            let request: NSFetchRequest<PlayerStatus> = PlayerStatus.fetchRequest()
+            request.predicate = NSPredicate(format: "attendingSession == true")
 
-            // ✅ Delegate grouping AND chooser assignment
-            self.groupedParticipants = ParticipantSection.group(players)
+            NotificationCenter.default.post(name: .refreshSession, object: nil)
 
-        } catch {
-            print("❌ Failed to load participants: \(error.localizedDescription)")
-        }
+            do {
+                let coreDataPlayers = try context.fetch(request)
+                var players = coreDataPlayers.map { PlayerStatusDTO(from: $0) }
 
-        DispatchQueue.main.async {
-            self.objectWillChange.send()
+                // 🔁 Determine chooser
+                let chooser = players.first(where: { $0.isChoosing && $0.categoryEnum == .waiting })
+
+                // 🧠 Compute isSelectable using updated grade filter state
+                players = players.map { player in
+                    var updated = player
+                    updated.isSelectable = isSelectableForChooserInternal(players: players, chooser: chooser, target: player)
+                    return updated
+                }
+
+                // ✅ Persist changes and group
+                PlayerStatusDTO.bulkCreateOrUpdate(from: players, in: context, fromAzure: false)
+                self.groupedParticipants = ParticipantSection.group(players)
+
+            } catch {
+                print("❌ Failed to load participants: \(error.localizedDescription)")
+            }
+
+            DispatchQueue.main.async {
+                self.objectWillChange.send()
+            }
         }
     }
+
+    
+    
 
     func refreshSelectability() {
         let chooser = players.first(where: { $0.isChoosing && $0.categoryEnum == .waiting })
@@ -547,9 +641,9 @@ class PlayingSessionViewModel: ObservableObject {
 
         // ✅ Always allow if target is same, lower, or up to 2 grades higher
         if targetIndex >= chooserIndex || targetIndex >= chooserIndex - 2 {
-            if targetIndex <= chooserIndex + 2 {
+            //if targetIndex <= chooserIndex + 2 {
                 return true
-            }
+            //}
         }
 
         // ✅ Count eligible players in the allowed range (chooserIndex+2 and below)
@@ -557,7 +651,8 @@ class PlayingSessionViewModel: ObservableObject {
             guard let grade = $0.grade?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
                   let index = gradeOrder.firstIndex(of: grade) else { return false }
 
-            return $0.attendingSession && index <= chooserIndex + 2
+            //return $0.attendingSession && index <= chooserIndex + 2
+            return $0.attendingSession && index >= chooserIndex - 2
         }
 
         if eligiblePlayers.count < 3 {

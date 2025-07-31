@@ -104,6 +104,8 @@ struct CourtListView: View {
 #Preview {
     CourtListView(
         viewModel: CourtsViewModel(),
-        sessionViewModel: PlayingSessionViewModel(refreshTrigger: Just(()).eraseToAnyPublisher())
+        sessionViewModel: PlayingSessionViewModel(
+            sessionID: UUID(),
+            refreshTrigger: Just(()).eraseToAnyPublisher())
     )
 }

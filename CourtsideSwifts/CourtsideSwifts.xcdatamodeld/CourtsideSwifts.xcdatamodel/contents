@@ -38,4 +38,14 @@
             </uniquenessConstraint>
         </uniquenessConstraints>
     </entity>
+    <entity name="SessionSettings" representedClassName="SessionSettings" syncable="YES" codeGenerationType="class">
+        <attribute name="sessionID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="userGradeFilter" attributeType="Boolean" usesScalarValueType="YES"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="sessionID"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
 </model>
