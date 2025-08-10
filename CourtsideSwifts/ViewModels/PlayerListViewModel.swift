@@ -303,6 +303,7 @@ class PlayerListViewModel: ObservableObject {
             playerName: trimmedName,
             firstName: first,
             surname: last,
+            changed_by: "swift_client",
             email: "",
             visits: 1,
             isPlaying: false,
@@ -381,6 +382,7 @@ class PlayerListViewModel: ObservableObject {
         for i in players.indices where selectedPlayers.contains(players[i]) {
             guard !players[i].attendingSession else { continue }
 
+            players[i].changed_by = "swift_client"
             players[i].attendingSession = true
             players[i].visits += 1
             players[i].isChosen = false

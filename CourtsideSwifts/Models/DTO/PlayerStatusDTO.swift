@@ -22,6 +22,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
     var surname: String?
     var email: String?
     var grade: String?
+    var changed_by: String?
 
     // MARK: - State Flags
     var isPlaying: Bool
@@ -36,6 +37,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
     var attendingSession: Bool
     var notified: Bool
     var needsSync: Bool = false
+    
 
     // MARK: - Stats & Metadata
     var visits: Int32
@@ -57,6 +59,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         case playerName = "playername"
         case firstName = "firstname"
         case surname, email, grade
+        case changed_by
         case visits
         case isPlaying = "isplaying"
         case isWaiting = "iswaiting"
@@ -94,6 +97,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         surname = try container.decodeIfPresent(String.self, forKey: .surname)
         email = try container.decodeIfPresent(String.self, forKey: .email)
         grade = try container.decodeIfPresent(String.self, forKey: .grade)
+        changed_by = try container.decodeIfPresent(String.self, forKey: .changed_by)
 
         visits = try container.decode(Int32.self, forKey: .visits)
         gamesCount = try container.decode(Int32.self, forKey: .gamesCount)
@@ -179,6 +183,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         self.surname = entity.surname
         self.email = entity.email
         self.grade = entity.grade
+        self.changed_by = entity.changed_by
 
         // MARK: - State Flags
         self.isPlaying = entity.isPlaying
@@ -223,6 +228,7 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         entity.surname = self.surname
         entity.email = self.email
         entity.grade = self.grade
+        entity.changed_by = self.changed_by
 
         // MARK: - State Flags
         entity.isPlaying = self.isPlaying
@@ -257,10 +263,10 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
 
     init(
         uuid: UUID = UUID(),
-      //  playerID: UUID = UUID(),
         playerName: String? = nil,
         firstName: String? = nil,
         surname: String? = nil,
+        changed_by: String? = nil,
         email: String? = nil,
         visits: Int32 = 0,
         isPlaying: Bool = false,
@@ -287,7 +293,6 @@ struct PlayerStatusDTO: Codable, Identifiable, Hashable {
         notified: Bool = false
     ) {
         self.uuid = uuid
-  //      self.playerID = playerID
         self.playerName = playerName
         self.firstName = firstName
         self.surname = surname
@@ -471,6 +476,8 @@ extension PlayerStatusDTO {
         if let last = surname         { update(\.surname, last) }
         if let mail = email           { update(\.email, mail) }
         if let grade = grade          { update(\.grade, grade) }
+        if let changed_by = changed_by           { update(\.changed_by, changed_by) }
+
         if let start = startedAt      { update(\.startedAt, start) }
         if let finish = finishedAt    { update(\.finishedAt, finish) }
         if let sq = squareID          { update(\.squareID, sq) }

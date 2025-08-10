@@ -5,6 +5,7 @@
     </entity>
     <entity name="PlayerStatus" representedClassName=".PlayerStatus" syncable="YES" codeGenerationType="class">
         <attribute name="attendingSession" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="changed_by" optional="YES" attributeType="String"/>
         <attribute name="courtNo" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="durationInSeconds" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="email" optional="YES" attributeType="String"/>
