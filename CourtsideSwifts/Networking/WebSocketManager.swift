@@ -11,7 +11,7 @@ import CoreData
 final class WebSocketManager: NSObject, URLSessionWebSocketDelegate {
     static let shared = WebSocketManager()
     private var task: URLSessionWebSocketTask?
-    private let url = URL(string: "wss://swifts-player-sync.azurewebsites.net/ws/updates")!
+    private let url = URL(string: "wss://swifts-player-sync.azurewebsites.net/ws")!
     public var isConnected = false
     
     func connect() {
@@ -60,15 +60,47 @@ final class WebSocketManager: NSObject, URLSessionWebSocketDelegate {
     }
     
     private func handleMessage(_ text: String) {
-        guard let dto = decodeWebSocketMessage(text) else {
+        // Decode the incoming WebSocket JSON payload
+        guard let data = text.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let eventType = json["type"] as? String else {
             print("❌ Failed to decode WebSocket message.")
             return
         }
+        
+        switch eventType {
+        case "player_update":
+            // Decode as PlayerStatusDTO
+            guard let dto = decodeWebSocketMessage(text) else {
+                print("❌ Failed to decode player update message.")
+                return
+            }
+            print("📨 Player update received for uuid \(dto.uuid)")
+            NotificationCenter.default.post(name: .webSocketDidReceivePlayerUpdate, object: dto)
+            
+        case "session_settings.updated":
+            // Handle session settings updates
+            guard let payload = json["payload"] as? [String: Any],
+                  let sessionID = payload["sessionID"] as? String,
+                  let userGradeFilter = payload["userGradeFilter"] as? Bool else {
+                print("⚠️ Invalid session settings payload.")
+                return
+            }
+            print("⚡ Session \(sessionID) updated → userGradeFilter = \(userGradeFilter)")
 
-        print("📨 WebSocket update for uuid \(dto.uuid)")
-        NotificationCenter.default.post(name: .webSocketDidReceivePlayerUpdate, object: dto)
+            // Notify observers (e.g., your PlayingSessionViewModel)
+            NotificationCenter.default.post(
+                name: .webSocketDidReceiveSessionSettingsUpdate,
+                object: nil,
+                userInfo: ["sessionID": sessionID, "userGradeFilter": userGradeFilter]
+            )
+
+        default:
+            print("ℹ️ Ignored unhandled WebSocket event: \(eventType)")
+        }
     }
-
+    
+    
 
 
     private func decodeWebSocketMessage(_ text: String) -> PlayerStatusDTO? {
@@ -151,6 +183,10 @@ final class WebSocketManager: NSObject, URLSessionWebSocketDelegate {
 }
 
 extension Notification.Name {
-    static let webSocketDidReceivePlayerUpdate = Notification.Name("webSocketDidReceivePlayerUpdate")
+    static let webSocketDidReceivePlayerUpdate =
+        Notification.Name("webSocketDidReceivePlayerUpdate")
+    static let webSocketDidReceiveSessionSettingsUpdate =
+        Notification.Name("webSocketDidReceiveSessionSettingsUpdate")
 }
+
 

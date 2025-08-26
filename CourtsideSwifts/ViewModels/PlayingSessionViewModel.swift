@@ -65,6 +65,13 @@ class PlayingSessionViewModel: ObservableObject {
                     self?.handlePlayerUpdate(dto)
                 }
                 .store(in: &cancellables)
+            
+            NotificationCenter.default.publisher(for: .webSocketDidReceiveSessionSettingsUpdate)
+                .sink { [weak self] notification in
+                    self?.handleSessionSettingsUpdate(notification)
+                }
+                .store(in: &cancellables)
+
 
             // 3️⃣ Debounced refresh
             refreshTrigger
@@ -920,6 +927,20 @@ class PlayingSessionViewModel: ObservableObject {
             showSyncBanner = false
         }
     }
+    
+    private func handleSessionSettingsUpdate(_ notification: Notification) {
+        guard let info = notification.userInfo,
+              let sessionIDString = info["sessionID"] as? String,
+              let incomingSessionID = UUID(uuidString: sessionIDString),
+              incomingSessionID == sessionID,  // Ensure it's for this session
+              let newUserGradeFilter = info["userGradeFilter"] as? Bool else {
+            return
+        }
+
+        print("⚡ Session \(sessionID) → useGradeFilter updated: \(newUserGradeFilter)")
+        useGradeFilter = newUserGradeFilter
+    }
+
 
 }
 

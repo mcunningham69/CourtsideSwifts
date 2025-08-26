@@ -14,7 +14,7 @@ enum PlayerApiError: Error {
 
 final class PlayerApiService: ObservableObject {
     private let context: NSManagedObjectContext
-    private let baseURL = "https://swiftsplayerapi2025.azurewebsites.net/api/v1/playerstatus"
+    private let baseURL = "https://swifts-player-sync.azurewebsites.net"
     
     static let shared = PlayerApiService()
     
@@ -30,11 +30,6 @@ final class PlayerApiService: ObservableObject {
         
         let (data, response) = try await URLSession.shared.data(from: url)
 
-       // if let jsonString = String(data: data, encoding: .utf8) {
-         //   print("📦 Raw JSON from server:\n\(jsonString)")
-        //}
-
-        
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
@@ -54,7 +49,7 @@ final class PlayerApiService: ObservableObject {
     }
     
     func getPlayerStatus(byID id: UUID) async throws -> PlayerStatusDTO? {
-        let url = URL(string: "\(baseURL)/\(id)")!
+        let url = URL(string: "\(baseURL)/players/\(id)")!
         let (data, response) = try await URLSession.shared.data(from: url)
 
         guard let httpResponse = response as? HTTPURLResponse,
@@ -70,29 +65,25 @@ final class PlayerApiService: ObservableObject {
   
     
     private func createPlayer(_ dto: PlayerStatusDTO) async throws -> [PlayerStatusDTO] {
-        let url = URL(string: baseURL)!
+        let url = URL(string: "\(baseURL)/players")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode([dto])
-
+        
         print("📨 POST payload:\n", String(data: request.httpBody ?? .init(), encoding: .utf8) ?? "—")
-
+        
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
-
+        
         print("🔵 Status code:", httpResponse.statusCode)
         print("📩 Response body:", String(data: data, encoding: .utf8) ?? "∅")
-
+        
         switch httpResponse.statusCode {
         case 200, 201, 204:
-            let returned = try JSONDecoder().decode([PlayerStatusDTO].self, from: data)
-            guard let first = returned.first else {
-                throw NSError(domain: "CreatePlayer", code: 0, userInfo: [NSLocalizedDescriptionKey: "Empty response"])
-            }
-            return returned
+            return try JSONDecoder().decode([PlayerStatusDTO].self, from: data)
         default:
             throw NSError(domain: "CreatePlayer", code: httpResponse.statusCode, userInfo: [
                 NSLocalizedDescriptionKey: "Server error \(httpResponse.statusCode)"
@@ -101,9 +92,7 @@ final class PlayerApiService: ObservableObject {
     }
 
     func updateSessionSettings(_ dto: SessionSettingsDTO) async throws {
-        let baseURL = URL(string: "https://swifts-player-sync.azurewebsites.net")!
-        let url = baseURL.appendingPathComponent("/session-settings/\(dto.sessionID.uuidString)")
-        
+        let url = URL(string: "\(baseURL)/players/sessions/update")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -116,29 +105,7 @@ final class PlayerApiService: ObservableObject {
     }
     
     func loadSessionSettings(sessionID: UUID) async throws -> SessionSettingsDTO? {
-        let baseURL = URL(string: "https://swifts-player-sync.azurewebsites.net")!
-        let url = baseURL.appendingPathComponent("/session-settings/\(sessionID.uuidString)")
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-
-        let dto = try JSONDecoder().decode(SessionSettingsDTO.self, from: data)
-        return dto
-    }
-
-
-    func fetchSessionSettings(for sessionID: UUID) async throws -> SessionSettingsDTO {
-        let baseURL = URL(string: "https://swifts-player-sync.azurewebsites.net")!
-        let url = baseURL.appendingPathComponent("/session-settings/\(sessionID.uuidString)")
-        
+        let url = URL(string: "\(baseURL)/players/sessions/\(sessionID.uuidString)")!
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let httpResponse = response as? HTTPURLResponse,
               (200..<300).contains(httpResponse.statusCode) else {
@@ -146,40 +113,69 @@ final class PlayerApiService: ObservableObject {
         }
         return try JSONDecoder().decode(SessionSettingsDTO.self, from: data)
     }
-    
 
-    
-    func checkOutPlayers(_ players: [PlayerStatusDTO]) async throws {
-        let baseURL = URL(string: "https://swifts-player-sync.azurewebsites.net")!
-        let url = baseURL.appendingPathComponent("/players/checkout")
 
+
+    func fetchSessionSettings(for sessionID: UUID) async throws -> SessionSettingsDTO {
+        let url = URL(string: "https://swifts-player-sync.azurewebsites.net/session-settings/\(sessionID.uuidString)")!
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        for dto in players {
-            print("📤 Sending UUID for checkout: \(dto.uuid)")
-        }
-
-        let payload = players.map { PlayerCheckOutDTO(uuid: $0.uuid.uuidString) }
-        request.httpBody = try JSONEncoder().encode(payload)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
+        switch httpResponse.statusCode {
+        case 200:
+            // ✅ Success: decode single DTO, not array
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(SessionSettingsDTO.self, from: data)
+
+        case 404:
+            print("⚠️ Session not found → Default session will be used.")
+            return SessionSettingsDTO(
+                sessionID: sessionID,
+                userGradeFilter: false,
+                updatedAt: Date()
+            )
+
+        default:
+            let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ Failed to fetch session settings: \(httpResponse.statusCode) → \(errorMessage)")
             throw URLError(.badServerResponse)
         }
     }
+
+    
+
+    
+    // MARK: - Checkout Players
+        func checkOutPlayers(_ players: [PlayerStatusDTO]) async throws {
+            let url = URL(string: "\(baseURL)/players/checkout")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+            let payload = players.map { PlayerCheckOutDTO(uuid: $0.uuid.uuidString) }
+            request.httpBody = try JSONEncoder().encode(payload)
+
+            let (_, response) = try await URLSession.shared.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200..<300).contains(httpResponse.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
+        }
+
 
 
 
     func upload(_ dto: inout PlayerStatusDTO,
                 context: NSManagedObjectContext) async throws {
-        
-        // 1️⃣ Determine if this is a new player (UUID == nil means something's wrong, but UUID() is never nil)
-        //  let isNewPlayer = (dto.playerID == UUID(uuidString: "00000000-0000-0000-0000-000000000000"))
-        
+
         // ✅ 1️⃣ Determine if this is a new player
             let isNewPlayer = (dto.uuid == .placeholder)
         
@@ -213,37 +209,17 @@ final class PlayerApiService: ObservableObject {
             }
     }
 
-
-
-
-
     
-
-    
-    
-    // MARK: - Upload Single DTO via PUT
+    // MARK: - Upload Player Updates
     private func uploadToAzure(_ dto: PlayerStatusDTO) async throws -> Bool {
-        guard let url = URL(string: "\(baseURL)/\(dto.uuid)") else {
-            print("❌ Invalid URL")
-            return false
-        }
-
+        guard let url = URL(string: "\(baseURL)/players/\(dto.uuid)") else { return false }
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let encoded = try JSONEncoder().encode(dto)
-        request.httpBody = encoded
-
-        if let json = String(data: encoded, encoding: .utf8) {
-            print("📦 Outgoing JSON:\n\(json)")
-        }
+        request.httpBody = try JSONEncoder().encode(dto)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        
         if let httpResponse = response as? HTTPURLResponse {
-            print("🔵 PATCH Status: \(httpResponse.statusCode)")
-
             if (200..<300).contains(httpResponse.statusCode) {
                 print("✅ PATCH success for \(dto.uuid)")
                 return true
@@ -252,24 +228,9 @@ final class PlayerApiService: ObservableObject {
                 print("🔴 PATCH failed: \(body)")
             }
         }
-
-    /*    if let httpResponse = response as? HTTPURLResponse {
-            print("🔵 Status code: \(httpResponse.statusCode)")
-
-            if (200..<300).contains(httpResponse.statusCode) {
-                print("✅ PUT success for player \(dto.uuid)")
-                return true
-            } else {
-                let bodyText = String(data: data, encoding: .utf8) ?? "No response body"
-                print("🔴 PUT failed with status \(httpResponse.statusCode)")
-                print("🔴 Response body: \(bodyText)")
-            }
-        } else {
-            print("❌ Invalid HTTP response")
-        }*/
-
         return false
     }
+
 
     
     // MARK: - Sync All Pending
